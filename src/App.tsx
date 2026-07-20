@@ -95,14 +95,6 @@ export default function App() {
     const local = localStorage.getItem('pramuka_settings');
     const systemPrefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     const parsed: AppSettings = local ? JSON.parse(local) : { ...defaultSettings, darkTheme: systemPrefersDark };
-    // Auto-migrate or set Supabase credentials to active settings
-    if (!parsed.supabaseConfig || parsed.supabaseConfig.supabaseUrl !== "https://kibpfprrjqqwsdqfgoxg.supabase.co") {
-      parsed.supabaseEnabled = true;
-      parsed.supabaseConfig = {
-        supabaseUrl: "https://kibpfprrjqqwsdqfgoxg.supabase.co",
-        supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnBmcHJyanFxd3NkcWZnb3hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NjQwMjUsImV4cCI6MjEwMDA0MDAyNX0.cTGnzbMbqQdU2Vw_XVis9v3ruPwPBGhFE9Sb1jV5j-Q"
-      };
-    }
     return parsed;
   });
 
@@ -513,10 +505,10 @@ export default function App() {
     };
   }, [settings.supabaseEnabled, settings.supabaseConfig]);
 
-  // Push Sync Effects to upload local mutations to Cloud
+  // Push Sync Effects to upload local mutations to Cloud (Only sync when Supabase is connected and initialized)
   const prevPesertaRef = useRef<Peserta[]>(peserta);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevPesertaRef.current.filter(p => !peserta.some(item => item.idPeserta === p.idPeserta));
@@ -533,11 +525,11 @@ export default function App() {
       }
     }
     prevPesertaRef.current = peserta;
-  }, [peserta, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [peserta, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   const prevKegiatanRef = useRef<Kegiatan[]>(kegiatan);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevKegiatanRef.current.filter(k => !kegiatan.some(item => item.idKegiatan === k.idKegiatan));
@@ -554,11 +546,11 @@ export default function App() {
       }
     }
     prevKegiatanRef.current = kegiatan;
-  }, [kegiatan, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [kegiatan, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   const prevKehadiranRef = useRef<Kehadiran[]>(kehadiran);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevKehadiranRef.current.filter(kh => !kehadiran.some(item => item.id === kh.id));
@@ -575,11 +567,11 @@ export default function App() {
       }
     }
     prevKehadiranRef.current = kehadiran;
-  }, [kehadiran, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [kehadiran, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   const prevAdminsRef = useRef<Admin[]>(admins);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevAdminsRef.current.filter(a => !admins.some(item => item.username === a.username));
@@ -596,11 +588,11 @@ export default function App() {
       }
     }
     prevAdminsRef.current = admins;
-  }, [admins, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [admins, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   const prevAuditLogsRef = useRef<AuditLog[]>(auditLogs);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevAuditLogsRef.current.filter(al => !auditLogs.some(item => item.id === al.id));
@@ -617,11 +609,11 @@ export default function App() {
       }
     }
     prevAuditLogsRef.current = auditLogs;
-  }, [auditLogs, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [auditLogs, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   const prevAnnouncementsRef = useRef<Pengumuman[]>(announcements);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevAnnouncementsRef.current.filter(an => !announcements.some(item => item.id === an.id));
@@ -638,11 +630,11 @@ export default function App() {
       }
     }
     prevAnnouncementsRef.current = announcements;
-  }, [announcements, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [announcements, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   const prevDocumentsRef = useRef<DokumenKegiatan[]>(documents);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevDocumentsRef.current.filter(docItem => !documents.some(item => item.id === docItem.id));
@@ -659,11 +651,11 @@ export default function App() {
       }
     }
     prevDocumentsRef.current = documents;
-  }, [documents, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [documents, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   const prevPangkalanDetailsRef = useRef<PangkalanDetail[]>(pangkalanDetails);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevPangkalanDetailsRef.current.filter(pd => !pangkalanDetails.some(item => item.idPeserta === pd.idPeserta));
@@ -680,11 +672,11 @@ export default function App() {
       }
     }
     prevPangkalanDetailsRef.current = pangkalanDetails;
-  }, [pangkalanDetails, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [pangkalanDetails, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   const prevSettingsRef = useRef<AppSettings>(settings);
   useEffect(() => {
-    if (settings.supabaseEnabled) {
+    if (settings.supabaseEnabled && supabaseConnected) {
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         if (JSON.stringify(prevSettingsRef.current) !== JSON.stringify(settings)) {
@@ -698,7 +690,7 @@ export default function App() {
       }
     }
     prevSettingsRef.current = settings;
-  }, [settings, settings.supabaseEnabled, settings.supabaseConfig]);
+  }, [settings, settings.supabaseEnabled, settings.supabaseConfig, supabaseConnected]);
 
   // Auto-correct any participants' levels based on school name
   useEffect(() => {
