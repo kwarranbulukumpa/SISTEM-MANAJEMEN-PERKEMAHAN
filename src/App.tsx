@@ -1019,18 +1019,6 @@ export default function App() {
               </div>
             </div>
 
-            <div className="pt-2">
-              <button
-                onClick={() => {
-                  setSettings(prev => ({ ...prev, supabaseEnabled: false }));
-                  setSupabaseInitializing(false);
-                  triggerToast('info', 'Beralih ke mode penyimpanan lokal (offline).');
-                }}
-                className="w-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold py-2.5 px-4 rounded-xl text-xs transition-all cursor-pointer"
-              >
-                Gunakan Mode Offline (Lokal)
-              </button>
-            </div>
             <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">Pramuka Bulukumpa Cloud Connector</p>
           </div>
         </div>
