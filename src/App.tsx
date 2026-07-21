@@ -234,7 +234,33 @@ export default function App() {
 
   // --- SUPABASE REAL-TIME SYNC ENGINE ---
   const [supabaseConnected, setSupabaseConnected] = useState<boolean>(false);
+  const [supabaseInitializing, setSupabaseInitializing] = useState<boolean>(false);
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
+
+  const isFirstPesertaSyncRef = useRef<boolean>(true);
+  const isFirstKegiatanSyncRef = useRef<boolean>(true);
+  const isFirstKehadiranSyncRef = useRef<boolean>(true);
+  const isFirstAdminsSyncRef = useRef<boolean>(true);
+  const isFirstAuditLogsSyncRef = useRef<boolean>(true);
+  const isFirstAnnouncementsSyncRef = useRef<boolean>(true);
+  const isFirstDocumentsSyncRef = useRef<boolean>(true);
+  const isFirstPangkalanDetailsSyncRef = useRef<boolean>(true);
+  const isFirstSettingsSyncRef = useRef<boolean>(true);
+
+  // Reset first sync flags if disconnected
+  useEffect(() => {
+    if (!supabaseConnected) {
+      isFirstPesertaSyncRef.current = true;
+      isFirstKegiatanSyncRef.current = true;
+      isFirstKehadiranSyncRef.current = true;
+      isFirstAdminsSyncRef.current = true;
+      isFirstAuditLogsSyncRef.current = true;
+      isFirstAnnouncementsSyncRef.current = true;
+      isFirstDocumentsSyncRef.current = true;
+      isFirstPangkalanDetailsSyncRef.current = true;
+      isFirstSettingsSyncRef.current = true;
+    }
+  }, [supabaseConnected]);
 
   useEffect(() => {
     if (!settings.supabaseEnabled || !settings.supabaseConfig) {
@@ -248,8 +274,11 @@ export default function App() {
 
     const setupSupabaseSync = async () => {
       try {
-        setSupabaseConnected(false);
-        setSupabaseError(null);
+        if (active) {
+          setSupabaseInitializing(true);
+          setSupabaseConnected(false);
+          setSupabaseError(null);
+        }
         
         const client = getSupabaseInstance(settings.supabaseConfig);
         clientInstance = client;
@@ -261,7 +290,7 @@ export default function App() {
           .eq('id', 'global')
           .maybeSingle();
 
-        if (errSettings) throw new Error(errSettings.message);
+        if (errSettings) throw new Error("Gagal memuat konfigurasi settings: " + errSettings.message);
 
         if (active) {
           if (setVal && setVal.data) {
@@ -275,14 +304,14 @@ export default function App() {
 
           // Tarik semua koleksi data lainnya secara paralel
           const [
-            { data: pList },
-            { data: kList },
-            { data: khList },
-            { data: admList },
-            { data: alList },
-            { data: annList },
-            { data: docList },
-            { data: pdList }
+            pResult,
+            kResult,
+            khResult,
+            admResult,
+            alResult,
+            annResult,
+            docResult,
+            pdResult
           ] = await Promise.all([
             client.from('peserta').select('*'),
             client.from('kegiatan').select('*'),
@@ -294,6 +323,24 @@ export default function App() {
             client.from('pangkalan_details').select('*')
           ]);
 
+          if (pResult.error) throw new Error(`Gagal memuat data peserta: ${pResult.error.message}`);
+          if (kResult.error) throw new Error(`Gagal memuat data kegiatan: ${kResult.error.message}`);
+          if (khResult.error) throw new Error(`Gagal memuat data kehadiran: ${khResult.error.message}`);
+          if (admResult.error) throw new Error(`Gagal memuat data admins: ${admResult.error.message}`);
+          if (alResult.error) throw new Error(`Gagal memuat data log audit: ${alResult.error.message}`);
+          if (annResult.error) throw new Error(`Gagal memuat data pengumuman: ${annResult.error.message}`);
+          if (docResult.error) throw new Error(`Gagal memuat data dokumen: ${docResult.error.message}`);
+          if (pdResult.error) throw new Error(`Gagal memuat data rincian pangkalan: ${pdResult.error.message}`);
+
+          const pList = pResult.data;
+          const kList = kResult.data;
+          const khList = khResult.data;
+          const admList = admResult.data;
+          const alList = alResult.data;
+          const annList = annResult.data;
+          const docList = docResult.data;
+          const pdList = pdResult.data;
+
           if (pList) setPeserta(pList);
           if (kList) setKegiatan(kList);
           if (khList) setKehadiran(khList);
@@ -304,6 +351,10 @@ export default function App() {
           if (pdList) setRawPangkalanDetails(pdList);
 
           setSupabaseConnected(true);
+        }
+
+        if (active) {
+          setSupabaseInitializing(false);
         }
 
         // 2. Langganan perubahan PostgreSQL secara real-time
@@ -488,6 +539,7 @@ export default function App() {
         console.error("Supabase Sync Error:", err);
         if (active) {
           setSupabaseError("Kesalahan sinkronisasi real-time Supabase: " + (err.message || "Periksa konfigurasi tabel database Anda."));
+          setSupabaseInitializing(false);
         }
       }
     };
@@ -509,6 +561,11 @@ export default function App() {
   const prevPesertaRef = useRef<Peserta[]>(peserta);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstPesertaSyncRef.current) {
+        prevPesertaRef.current = peserta;
+        isFirstPesertaSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevPesertaRef.current.filter(p => !peserta.some(item => item.idPeserta === p.idPeserta));
@@ -530,6 +587,11 @@ export default function App() {
   const prevKegiatanRef = useRef<Kegiatan[]>(kegiatan);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstKegiatanSyncRef.current) {
+        prevKegiatanRef.current = kegiatan;
+        isFirstKegiatanSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevKegiatanRef.current.filter(k => !kegiatan.some(item => item.idKegiatan === k.idKegiatan));
@@ -551,6 +613,11 @@ export default function App() {
   const prevKehadiranRef = useRef<Kehadiran[]>(kehadiran);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstKehadiranSyncRef.current) {
+        prevKehadiranRef.current = kehadiran;
+        isFirstKehadiranSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevKehadiranRef.current.filter(kh => !kehadiran.some(item => item.id === kh.id));
@@ -572,6 +639,11 @@ export default function App() {
   const prevAdminsRef = useRef<Admin[]>(admins);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstAdminsSyncRef.current) {
+        prevAdminsRef.current = admins;
+        isFirstAdminsSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevAdminsRef.current.filter(a => !admins.some(item => item.username === a.username));
@@ -593,6 +665,11 @@ export default function App() {
   const prevAuditLogsRef = useRef<AuditLog[]>(auditLogs);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstAuditLogsSyncRef.current) {
+        prevAuditLogsRef.current = auditLogs;
+        isFirstAuditLogsSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevAuditLogsRef.current.filter(al => !auditLogs.some(item => item.id === al.id));
@@ -614,6 +691,11 @@ export default function App() {
   const prevAnnouncementsRef = useRef<Pengumuman[]>(announcements);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstAnnouncementsSyncRef.current) {
+        prevAnnouncementsRef.current = announcements;
+        isFirstAnnouncementsSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevAnnouncementsRef.current.filter(an => !announcements.some(item => item.id === an.id));
@@ -635,6 +717,11 @@ export default function App() {
   const prevDocumentsRef = useRef<DokumenKegiatan[]>(documents);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstDocumentsSyncRef.current) {
+        prevDocumentsRef.current = documents;
+        isFirstDocumentsSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevDocumentsRef.current.filter(docItem => !documents.some(item => item.id === docItem.id));
@@ -656,6 +743,11 @@ export default function App() {
   const prevPangkalanDetailsRef = useRef<PangkalanDetail[]>(pangkalanDetails);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstPangkalanDetailsSyncRef.current) {
+        prevPangkalanDetailsRef.current = pangkalanDetails;
+        isFirstPangkalanDetailsSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         const deleted = prevPangkalanDetailsRef.current.filter(pd => !pangkalanDetails.some(item => item.idPeserta === pd.idPeserta));
@@ -677,6 +769,11 @@ export default function App() {
   const prevSettingsRef = useRef<AppSettings>(settings);
   useEffect(() => {
     if (settings.supabaseEnabled && supabaseConnected) {
+      if (isFirstSettingsSyncRef.current) {
+        prevSettingsRef.current = settings;
+        isFirstSettingsSyncRef.current = false;
+        return;
+      }
       const client = getSupabaseInstance(settings.supabaseConfig);
       if (client) {
         if (JSON.stringify(prevSettingsRef.current) !== JSON.stringify(settings)) {
@@ -898,6 +995,47 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col justify-between transition-colors duration-300">
       
+      {/* SUPABASE CONNECTION INITIALIZING LOADER */}
+      {supabaseInitializing && (
+        <div className="fixed inset-0 z-50 bg-zinc-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 rounded-3xl max-w-md w-full space-y-6 shadow-2xl relative overflow-hidden">
+            <div className="absolute -right-16 -top-16 w-32 h-32 rounded-full bg-emerald-500/10 blur-xl"></div>
+            <div className="flex flex-col items-center space-y-4">
+              <div className="relative flex items-center justify-center">
+                <Compass className="w-12 h-12 text-emerald-500 animate-spin" />
+                <div className="absolute inset-0 rounded-full border-2 border-emerald-500/20 animate-ping"></div>
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-wider">Menghubungkan Awan</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Sinkronisasi data real-time dengan database Supabase sedang berlangsung...
+                </p>
+              </div>
+            </div>
+            
+            <div className="relative pt-1">
+              <div className="overflow-hidden h-2 text-xs flex rounded-full bg-zinc-100 dark:bg-zinc-800">
+                <div className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-emerald-500 animate-pulse w-full animate-progress" style={{ width: '100%' }}></div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  setSettings(prev => ({ ...prev, supabaseEnabled: false }));
+                  setSupabaseInitializing(false);
+                  triggerToast('info', 'Beralih ke mode penyimpanan lokal (offline).');
+                }}
+                className="w-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold py-2.5 px-4 rounded-xl text-xs transition-all cursor-pointer"
+              >
+                Gunakan Mode Offline (Lokal)
+              </button>
+            </div>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">Pramuka Bulukumpa Cloud Connector</p>
+          </div>
+        </div>
+      )}
+      
       {/* GLOBAL BANNER NAVBAR */}
       <header className="bg-emerald-900 text-white shadow-md border-b border-emerald-950 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -940,6 +1078,39 @@ export default function App() {
 
       {/* MAIN VIEW CONTROLLER */}
       <main className="flex-1 py-8">
+        
+        {/* SUPABASE CONNECTION ERROR WARNING BANNER */}
+        {settings.supabaseEnabled && supabaseError && (
+          <div className="max-w-6xl mx-auto px-4 mb-6 animate-fade-in">
+            <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400 py-3.5 px-4 rounded-2xl text-xs font-semibold flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <XCircle className="w-5 h-5 text-red-500 shrink-0" />
+                <span className="leading-relaxed">{supabaseError}</span>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
+                <button
+                  onClick={() => {
+                    // Force retry connection by resetting supabaseConnected and triggering setupSupabaseSync
+                    setSettings(prev => ({ ...prev }));
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1.5 rounded-xl text-[10px] uppercase tracking-wide transition-colors cursor-pointer w-full sm:w-auto text-center"
+                >
+                  Coba Lagi
+                </button>
+                <button
+                  onClick={() => {
+                    setSettings(prev => ({ ...prev, supabaseEnabled: false }));
+                    setSupabaseError(null);
+                    triggerToast('info', 'Beralih ke mode penyimpanan lokal (offline).');
+                  }}
+                  className="bg-zinc-200 dark:bg-zinc-800 text-zinc-750 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 font-bold px-3 py-1.5 rounded-xl text-[10px] uppercase tracking-wide transition-colors cursor-pointer w-full sm:w-auto text-center"
+                >
+                  Mode Lokal
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
 
         
