@@ -1,5 +1,33 @@
 import { jsPDF } from 'jspdf';
+import JsBarcode from 'jsbarcode';
 import { Peserta, Kehadiran, AnggotaPramuka, Kegiatan, AppSettings, formatIndonesianDate, formatIndonesianTime } from '../types';
+
+/**
+ * Helper to generate 1D Code128 Barcode as PNG Data URL for ID cards.
+ */
+function generateBarcodeBase64(value: string): string | null {
+  if (!value || value.trim() === '') return null;
+  try {
+    const canvas = document.createElement('canvas');
+    JsBarcode(canvas, value.trim(), {
+      format: 'CODE128',
+      width: 2,
+      height: 40,
+      displayValue: true,
+      fontSize: 12,
+      fontOptions: 'bold',
+      font: 'sans-serif',
+      textMargin: 2,
+      margin: 4,
+      background: '#ffffff',
+      lineColor: '#000000'
+    });
+    return canvas.toDataURL('image/png');
+  } catch (err) {
+    console.error('Gagal membuat barcode garis:', err);
+    return null;
+  }
+}
 
 // Helper to load image as base64 and convert transparent parts to a white JPEG format (which is 100% supported in jsPDF)
 async function getBase64ImageFromUrl(imageUrl: string): Promise<string> {
@@ -339,6 +367,20 @@ export async function generateKartuAbsenPDF(peserta: Peserta, settings?: AppSett
     doc.setFontSize(9);
     doc.setTextColor(156, 163, 175);
     doc.text('[QR Code]', w / 2, qrBoxY + (qrBoxH / 2) + 2, { align: 'center' });
+  }
+
+  // 4.5. Barcode Garis (1D Barcode) below QR Box
+  const barcodeBase64Absen = generateBarcodeBase64(String(qrCodeToUse));
+  if (barcodeBase64Absen) {
+    try {
+      const bcW = 48;
+      const bcH = 12;
+      const bcX = (w - bcW) / 2;
+      const bcY = qrBoxY + qrBoxH + 3;
+      doc.addImage(barcodeBase64Absen, 'PNG', bcX, bcY, bcW, bcH);
+    } catch (e) {
+      console.warn("Gagal menambahkan barcode garis ke Kartu Absen:", e);
+    }
   }
 
   // 5. User Info Box (Contains ID Regu/Peserta)
@@ -799,11 +841,11 @@ export async function generateBulkIdCardsPDF(
     doc.setLineWidth(0.35);
     doc.line(cardX + 15, sepY, cardX + cardW - 15, sepY);
 
-    // 5. Centered 3x4 Photo Placeholder Box (30mm x 40mm) positioned dynamically
-    const photoW = 30;
-    const photoH = 40;
+    // 5. Centered 3x4 Photo Placeholder Box (28mm x 35mm) positioned dynamically
+    const photoW = 28;
+    const photoH = 35;
     const photoX = cardX + (cardW - photoW) / 2;
-    const photoY = sepY + 2.5;
+    const photoY = sepY + 1.5;
 
     // Light-filled background for photo area
     doc.setFillColor(255, 255, 255);
@@ -819,11 +861,28 @@ export async function generateBulkIdCardsPDF(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(156, 163, 175);
-    doc.text('TEMPEL FOTO', cardX + (cardW / 2), photoY + 21.5, { align: 'center' });
+    doc.text('TEMPEL FOTO', cardX + (cardW / 2), photoY + 18.5, { align: 'center' });
+
+    // 5.5. Barcode Garis (1D Barcode) directly under Photo Box (Regu / Pangkalan Barcode)
+    const barcodeCode = String(idPeserta || 'PRAMUKA').trim();
+    const barcodeBase64 = generateBarcodeBase64(barcodeCode);
+    
+    const barcodeW = 46;
+    const barcodeH = 12;
+    const barcodeX = cardX + (cardW - barcodeW) / 2;
+    const barcodeY = photoY + photoH + 1.5;
+
+    if (barcodeBase64) {
+      try {
+        doc.addImage(barcodeBase64, 'PNG', barcodeX, barcodeY, barcodeW, barcodeH);
+      } catch (err) {
+        console.warn("Gagal menambahkan barcode ke ID Card:", err);
+      }
+    }
 
     // 6. User Info Box placed closer to the bottom (Contains Nama Lengkap)
-    const infoY = cardY + 91;
-    const infoH = 26;
+    const infoY = cardY + 95;
+    const infoH = 24;
     
     // Determine dynamic font size based on name length to emphasize short names and gracefully scale long ones
     let nameFontSize = 10.5;
