@@ -256,7 +256,8 @@ export default function ParticipantDashboard({
         pembinaData,
         myDetail.anggota,
         settings,
-        currentPeserta.namaLengkap
+        currentPeserta.namaLengkap,
+        currentPeserta.tingkatan
       );
     } catch (err: any) {
       console.error(err);

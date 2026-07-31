@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
-import { Peserta, Kehadiran, AnggotaPramuka, Kegiatan, AppSettings, formatIndonesianDate, formatIndonesianTime } from '../types';
+import { Peserta, Kehadiran, AnggotaPramuka, Kegiatan, AppSettings, formatIndonesianDate, formatIndonesianTime, getTingkatanFromSekolah } from '../types';
 
 /**
  * Helper to generate 1D Code128 Barcode as PNG Data URL for ID cards.
@@ -1229,7 +1229,8 @@ export async function generateSertifikatKontingenPDF(
   pembina: { nama: string; hp?: string } | null,
   anggotaList: AnggotaPramuka[],
   settings?: AppSettings,
-  fallbackPesertaNama?: string
+  fallbackPesertaNama?: string,
+  tingkatan?: string
 ): Promise<void> {
   const eventName = settings?.namaEvent || "Kemah Bakti & Lomba Pramuka Bulukumpa";
   const eventOrganizer = settings?.pelaksanaEvent || "Kwartir Ranting Gerakan Pramuka Bulukumpa";
@@ -1244,19 +1245,42 @@ export async function generateSertifikatKontingenPDF(
   const w = 297;
   const h = 210;
 
-  // Load template image if provided
-  let templateImg: LoadedImage | null = null;
-  if (settings?.certificateTemplateUrl && settings.certificateTemplateUrl.trim() !== '') {
+  const resolvedTingkatan = tingkatan || getTingkatanFromSekolah(pangkalanName);
+  const pesertaKategori: 'sd' | 'smp' | 'sma' | 'default' =
+    resolvedTingkatan === 'Penggalang SD (SD/MI)' ? 'sd' :
+    resolvedTingkatan === 'Penggalang SMP (SMP/MTs)' ? 'smp' :
+    resolvedTingkatan === 'Penegak (SMA/MA/SMK)' ? 'sma' : 'default';
+
+  async function loadTemplateSafe(url?: string): Promise<LoadedImage | null> {
+    if (!url || url.trim() === '') return null;
     try {
-      templateImg = await loadLogoImage(settings.certificateTemplateUrl);
+      return await loadLogoImage(url.trim());
     } catch (err) {
-      console.warn("Gagal memuat template sertifikat dari URL, menggunakan desain standar:", err);
+      console.warn("Gagal memuat template sertifikat dari URL:", url, err);
+      return null;
     }
   }
 
-  // Load logo for fallback template header
+  const [defaultImg, pembinaImg, sdImg, smpImg, smaImg] = await Promise.all([
+    loadTemplateSafe(settings?.certificateTemplateUrl),
+    loadTemplateSafe(settings?.certificateTemplateUrlPembina),
+    loadTemplateSafe(settings?.certificateTemplateUrlSD),
+    loadTemplateSafe(settings?.certificateTemplateUrlSMP),
+    loadTemplateSafe(settings?.certificateTemplateUrlSMA)
+  ]);
+
+  const templateMap: Record<'pembina' | 'sd' | 'smp' | 'sma' | 'default', LoadedImage | null> = {
+    pembina: pembinaImg || defaultImg,
+    sd: sdImg || defaultImg,
+    smp: smpImg || defaultImg,
+    sma: smaImg || defaultImg,
+    default: defaultImg
+  };
+
+  // Load logo for fallback template header if needed
   let logoImg: LoadedImage | null = null;
-  if (!templateImg && settings?.logoUrl && settings.logoUrl.trim() !== '') {
+  const anyTemplateAvailable = Boolean(defaultImg || pembinaImg || sdImg || smpImg || smaImg);
+  if (!anyTemplateAvailable && settings?.logoUrl && settings.logoUrl.trim() !== '') {
     try {
       logoImg = await loadLogoImage(settings.logoUrl);
     } catch (err) {
@@ -1267,6 +1291,7 @@ export async function generateSertifikatKontingenPDF(
   interface SertifikatRecipient {
     nama: string;
     peran: string;
+    kategori: 'pembina' | 'sd' | 'smp' | 'sma' | 'default';
   }
 
   const recipients: SertifikatRecipient[] = [];
@@ -1274,7 +1299,8 @@ export async function generateSertifikatKontingenPDF(
   if (pembina && pembina.nama && pembina.nama.trim() !== '') {
     recipients.push({
       nama: pembina.nama.trim(),
-      peran: `PEMBINA PRAMUKA ${pangkalanName.toUpperCase()}`
+      peran: `PEMBINA PRAMUKA ${pangkalanName.toUpperCase()}`,
+      kategori: 'pembina'
     });
   }
 
@@ -1284,7 +1310,8 @@ export async function generateSertifikatKontingenPDF(
       if (namaAnggota && namaAnggota.trim() !== '') {
         recipients.push({
           nama: namaAnggota.trim(),
-          peran: `PESERTA DARI ${pangkalanName.toUpperCase()}`
+          peran: `PESERTA DARI ${pangkalanName.toUpperCase()}`,
+          kategori: pesertaKategori
         });
       }
     });
@@ -1294,7 +1321,8 @@ export async function generateSertifikatKontingenPDF(
   if (recipients.length === 0) {
     recipients.push({
       nama: fallbackPesertaNama || pangkalanName,
-      peran: `PESERTA DARI ${pangkalanName.toUpperCase()}`
+      peran: `PESERTA DARI ${pangkalanName.toUpperCase()}`,
+      kategori: pesertaKategori
     });
   }
 
@@ -1303,10 +1331,12 @@ export async function generateSertifikatKontingenPDF(
       doc.addPage('a4', 'l');
     }
 
-    if (templateImg) {
+    const pageTemplateImg = templateMap[recipient.kategori] || templateMap.default;
+
+    if (pageTemplateImg) {
       // Draw user's custom JPG/PNG blank certificate template across full landscape A4
       try {
-        doc.addImage(templateImg.data, 'JPEG', 0, 0, w, h);
+        doc.addImage(pageTemplateImg.data, 'JPEG', 0, 0, w, h);
       } catch (e) {
         console.warn("Gagal menggambar template sertifikat:", e);
       }

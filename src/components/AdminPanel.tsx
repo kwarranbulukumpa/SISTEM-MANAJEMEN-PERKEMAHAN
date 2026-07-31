@@ -3557,30 +3557,173 @@ export default function AdminPanel({
                   </p>
                 </div>
 
-                {/* TEMPLATE SERTIFIKAT PENGHARGAAN (SUPABASE STORAGE / CUSTOM URL) */}
-                <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-4 space-y-3">
+                {/* TEMPLATE SERTIFIKAT PENGHARGAAN PER TINGKATAN & PEMBINA */}
+                <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-4 space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider mb-1">
-                      Template Sertifikat Penghargaan (URL Gambar Landscape / Supabase Storage)
-                    </label>
-                    <div className="flex flex-col sm:flex-row gap-3 items-start">
+                    <h3 className="text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">
+                      Template Sertifikat Penghargaan (URL Gambar Landscape A4)
+                    </h3>
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
+                      Anda dapat menentukan desain template sertifikat yang berbeda untuk setiap tingkatan dan untuk Pembina. Jika URL dikosongkan, sistem akan menggunakan Template Umum / Cadangan secara otomatis.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* TEMPLATE PEMBINA */}
+                    <div className="bg-white dark:bg-zinc-900 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          1. Untuk Pembina Pramuka
+                        </span>
+                        <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 rounded-full font-semibold">
+                          Pembina
+                        </span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={settings.certificateTemplateUrlPembina || ''}
+                          onChange={(e) => onUpdateSettings({ ...settings, certificateTemplateUrlPembina: e.target.value })}
+                          placeholder="URL Template Pembina (opsional)..."
+                          className="flex-1 w-full text-xs bg-zinc-50 dark:bg-zinc-800/80 border border-emerald-300 dark:border-emerald-700/80 rounded-lg p-2.5 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                        />
+                        {settings.certificateTemplateUrlPembina && settings.certificateTemplateUrlPembina.trim() !== '' && (
+                          <div className="relative h-10 w-14 shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-0.5 flex items-center justify-center overflow-hidden">
+                            <img
+                              src={settings.certificateTemplateUrlPembina}
+                              alt="Preview Pembina"
+                              referrerPolicy="no-referrer"
+                              className="max-h-full max-w-full object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/100x60?text=Invalid'; }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* TEMPLATE SD / MI */}
+                    <div className="bg-white dark:bg-zinc-900 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          2. Tingkatan SD / MI
+                        </span>
+                        <span className="text-[10px] bg-green-100 dark:bg-green-900/60 text-green-800 dark:text-green-200 px-2 py-0.5 rounded-full font-semibold">
+                          Penggalang SD
+                        </span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={settings.certificateTemplateUrlSD || ''}
+                          onChange={(e) => onUpdateSettings({ ...settings, certificateTemplateUrlSD: e.target.value })}
+                          placeholder="URL Template SD/MI (opsional)..."
+                          className="flex-1 w-full text-xs bg-zinc-50 dark:bg-zinc-800/80 border border-emerald-300 dark:border-emerald-700/80 rounded-lg p-2.5 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                        />
+                        {settings.certificateTemplateUrlSD && settings.certificateTemplateUrlSD.trim() !== '' && (
+                          <div className="relative h-10 w-14 shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-0.5 flex items-center justify-center overflow-hidden">
+                            <img
+                              src={settings.certificateTemplateUrlSD}
+                              alt="Preview SD"
+                              referrerPolicy="no-referrer"
+                              className="max-h-full max-w-full object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/100x60?text=Invalid'; }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* TEMPLATE SMP / MTS */}
+                    <div className="bg-white dark:bg-zinc-900 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          3. Tingkatan SMP / MTs
+                        </span>
+                        <span className="text-[10px] bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded-full font-semibold">
+                          Penggalang SMP
+                        </span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={settings.certificateTemplateUrlSMP || ''}
+                          onChange={(e) => onUpdateSettings({ ...settings, certificateTemplateUrlSMP: e.target.value })}
+                          placeholder="URL Template SMP/MTs (opsional)..."
+                          className="flex-1 w-full text-xs bg-zinc-50 dark:bg-zinc-800/80 border border-emerald-300 dark:border-emerald-700/80 rounded-lg p-2.5 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                        />
+                        {settings.certificateTemplateUrlSMP && settings.certificateTemplateUrlSMP.trim() !== '' && (
+                          <div className="relative h-10 w-14 shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-0.5 flex items-center justify-center overflow-hidden">
+                            <img
+                              src={settings.certificateTemplateUrlSMP}
+                              alt="Preview SMP"
+                              referrerPolicy="no-referrer"
+                              className="max-h-full max-w-full object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/100x60?text=Invalid'; }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* TEMPLATE SMA / MA / SMK */}
+                    <div className="bg-white dark:bg-zinc-900 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          4. Tingkatan SMA / MA / SMK
+                        </span>
+                        <span className="text-[10px] bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded-full font-semibold">
+                          Penegak SMA
+                        </span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={settings.certificateTemplateUrlSMA || ''}
+                          onChange={(e) => onUpdateSettings({ ...settings, certificateTemplateUrlSMA: e.target.value })}
+                          placeholder="URL Template SMA/MA/SMK (opsional)..."
+                          className="flex-1 w-full text-xs bg-zinc-50 dark:bg-zinc-800/80 border border-emerald-300 dark:border-emerald-700/80 rounded-lg p-2.5 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                        />
+                        {settings.certificateTemplateUrlSMA && settings.certificateTemplateUrlSMA.trim() !== '' && (
+                          <div className="relative h-10 w-14 shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-0.5 flex items-center justify-center overflow-hidden">
+                            <img
+                              src={settings.certificateTemplateUrlSMA}
+                              alt="Preview SMA"
+                              referrerPolicy="no-referrer"
+                              className="max-h-full max-w-full object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/100x60?text=Invalid'; }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* TEMPLATE UMUM / CADANGAN */}
+                  <div className="bg-white dark:bg-zinc-900 border border-emerald-300 dark:border-emerald-700 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                        5. Template Umum / Cadangan (Default)
+                      </span>
+                      <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 rounded-full font-semibold">
+                        Semua / Fallback
+                      </span>
+                    </div>
+                    <div className="flex gap-3 items-center">
                       <input
                         type="text"
                         value={settings.certificateTemplateUrl || ''}
                         onChange={(e) => onUpdateSettings({ ...settings, certificateTemplateUrl: e.target.value })}
                         placeholder="Contoh: https://kibpfprrjqqwsdqfgoxg.supabase.co/storage/v1/object/public/sertifikat/template-kosong.png"
-                        className="flex-1 w-full text-xs bg-white dark:bg-zinc-800 border border-emerald-300 dark:border-emerald-700/80 rounded-xl p-3 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm font-medium"
+                        className="flex-1 w-full text-xs bg-zinc-50 dark:bg-zinc-800/80 border border-emerald-300 dark:border-emerald-700/80 rounded-lg p-2.5 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
                       />
                       {settings.certificateTemplateUrl && settings.certificateTemplateUrl.trim() !== '' && (
-                        <div className="relative h-12 w-16 shrink-0 rounded-xl border border-zinc-200 dark:border-zinc-750 bg-white dark:bg-zinc-800 p-1 flex items-center justify-center overflow-hidden shadow-inner">
-                          <img 
-                            src={settings.certificateTemplateUrl} 
-                            alt="Pratinjau Template" 
+                        <div className="relative h-10 w-14 shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-0.5 flex items-center justify-center overflow-hidden">
+                          <img
+                            src={settings.certificateTemplateUrl}
+                            alt="Preview Default"
                             referrerPolicy="no-referrer"
                             className="max-h-full max-w-full object-contain"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = 'https://placehold.co/100x60?text=Invalid';
-                            }}
+                            onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/100x60?text=Invalid'; }}
                           />
                         </div>
                       )}
@@ -3595,9 +3738,9 @@ export default function AdminPanel({
                     <ol className="list-decimal list-inside space-y-1 pl-1 text-zinc-600 dark:text-zinc-400">
                       <li>Buka dasbor proyek <span className="font-semibold text-zinc-800 dark:text-zinc-200">Supabase</span> Anda, lalu pilih menu <span className="font-semibold text-zinc-800 dark:text-zinc-200">Storage</span>.</li>
                       <li>Buat bucket baru (misalnya dengan nama <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-emerald-600 dark:text-emerald-400">sertifikat</span>) dan aktifkan opsi <span className="font-semibold">Public Bucket</span> agar gambar dapat diakses secara publik.</li>
-                      <li>Upload file gambar template sertifikat kosong berorientasi <span className="font-semibold">Landscape A4 (JPG/PNG resolusi tinggi)</span>.</li>
+                      <li>Upload file gambar template sertifikat kosong berorientasi <span className="font-semibold">Landscape A4 (JPG/PNG resolusi tinggi)</span> untuk masing-masing tingkatan atau pembina.</li>
                       <li>Klik ikon <span className="font-semibold">Get Public URL / Copy URL</span> pada file gambar yang telah diupload di Supabase Storage.</li>
-                      <li>Tempel (<span className="font-semibold">Paste</span>) URL publik tersebut ke dalam kotak input di atas. Sistem akan otomatis mengisi nama peserta & pangkalan di atas template tersebut saat diunduh!</li>
+                      <li>Tempel (<span className="font-semibold">Paste</span>) URL publik tersebut ke kotak input tingkatan yang sesuai di atas. Sistem akan otomatis memilih template sesuai peran & tingkatan peserta saat diunduh!</li>
                     </ol>
                   </div>
                 </div>

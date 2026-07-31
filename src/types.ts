@@ -144,7 +144,11 @@ export interface AppSettings {
   lokasiEvent?: string;
   pelaksanaEvent?: string;
   logoUrl?: string;
-  certificateTemplateUrl?: string;
+  certificateTemplateUrl?: string; // Template Umum / Cadangan
+  certificateTemplateUrlSD?: string; // Tingkatan SD / MI
+  certificateTemplateUrlSMP?: string; // Tingkatan SMP / MTs
+  certificateTemplateUrlSMA?: string; // Tingkatan SMA / MA / SMK
+  certificateTemplateUrlPembina?: string; // Untuk Pembina
   namaKetua?: string;
   namaSekretaris?: string;
   namaBendahara?: string;
