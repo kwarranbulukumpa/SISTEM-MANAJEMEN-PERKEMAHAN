@@ -42,8 +42,8 @@ export default function ScannerComponent({
   const [manualId, setManualId] = useState<string>('');
   const [cameraError, setCameraError] = useState<string | null>(null);
   
-  const [scanMethod, setScanMethod] = useState<'camera' | 'hardware'>('camera');
-  const [autoFocusHardware, setAutoFocusHardware] = useState<boolean>(true);
+  const [scanMethod, setScanMethod] = useState<'camera' | 'hardware'>('hardware');
+  const [autoFocusHardware, setAutoFocusHardware] = useState<boolean>(false);
   const [hardwareInput, setHardwareInput] = useState<string>('');
   const hardwareInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -736,18 +736,6 @@ export default function ScannerComponent({
         <div className="flex border-b border-zinc-200 dark:border-zinc-800 mb-6 gap-2">
           <button
             type="button"
-            onClick={() => setScanMethod('camera')}
-            className={`flex-1 pb-3 text-sm font-semibold border-b-2 transition-all flex items-center justify-center gap-2 ${
-              scanMethod === 'camera'
-                ? 'border-emerald-600 text-emerald-800 dark:text-emerald-400 font-bold'
-                : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
-            }`}
-          >
-            <Camera className="w-4 h-4" />
-            Kamera HP / Laptop (Live Webcam)
-          </button>
-          <button
-            type="button"
             onClick={() => {
               setScanMethod('hardware');
               stopScanning();
@@ -760,7 +748,19 @@ export default function ScannerComponent({
             id="tab-hardware-scanner-selection"
           >
             <Keyboard className="w-4 h-4" />
-            Alat Scanner Fisik (USB/Wireless)
+            Alat Scanner Fisik (Metode Utama)
+          </button>
+          <button
+            type="button"
+            onClick={() => setScanMethod('camera')}
+            className={`flex-1 pb-3 text-sm font-semibold border-b-2 transition-all flex items-center justify-center gap-2 ${
+              scanMethod === 'camera'
+                ? 'border-emerald-600 text-emerald-800 dark:text-emerald-400 font-bold'
+                : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+            }`}
+          >
+            <Camera className="w-4 h-4" />
+            Kamera HP / Laptop (Cadangan)
           </button>
         </div>
 
@@ -771,10 +771,10 @@ export default function ScannerComponent({
             <div>
               <h3 className="font-semibold text-lg text-emerald-900 dark:text-emerald-400 flex items-center gap-2">
                 <Camera className="w-5 h-5 text-emerald-600 dark:text-emerald-500" />
-                Pemindai QR Code Peserta
+                Pemindai Kamera HP / Laptop (Cadangan)
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Posisikan QR Code di depan kamera utama handphone atau laptop Anda.
+                Gunakan kamera HP atau webcam laptop sebagai opsi cadangan jika alat scanner fisik tidak tersedia.
               </p>
             </div>
             
@@ -1067,10 +1067,10 @@ export default function ScannerComponent({
               <div>
                 <h3 className="font-semibold text-lg text-emerald-900 dark:text-emerald-400 flex items-center gap-2">
                   <Barcode className="w-6 h-6 text-emerald-600 dark:text-emerald-500 animate-pulse" />
-                  Mode Alat Scanner Fisik (USB / Wireless)
+                  Mode Alat Scanner Fisik (Metode Utama)
                 </h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Memindai ID/Barcode menggunakan alat scanner genggam (barcode reader gun).
+                  Memindai ID/Barcode secara instan menggunakan alat scanner fisik USB/Wireless (Barcode Reader Gun).
                 </p>
               </div>
 
@@ -1126,17 +1126,38 @@ export default function ScannerComponent({
                 <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                   Fokus Scanner Otomatis
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer select-none py-2">
-                  <input
-                    type="checkbox"
-                    checked={autoFocusHardware}
-                    onChange={(e) => setAutoFocusHardware(e.target.checked)}
-                    className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4 border-zinc-300"
-                  />
-                  <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                    Jaga Fokus Kursor (Hands-Free)
-                  </span>
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none py-1.5">
+                    <input
+                      type="checkbox"
+                      checked={autoFocusHardware}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setAutoFocusHardware(checked);
+                        if (checked) {
+                          setTimeout(() => hardwareInputRef.current?.focus(), 50);
+                        }
+                      }}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4 border-zinc-300"
+                    />
+                    <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                      Jaga Fokus Kursor (Hands-Free)
+                    </span>
+                  </label>
+                  {!autoFocusHardware && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAutoFocusHardware(true);
+                        setTimeout(() => hardwareInputRef.current?.focus(), 50);
+                      }}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1"
+                      title="Aktifkan Jaga Fokus Kursor"
+                    >
+                      Aktifkan Fokus
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1165,16 +1186,30 @@ export default function ScannerComponent({
                 </div>
               </form>
 
-              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mt-4 max-w-md">
+              <div className="mt-4 flex flex-col items-center justify-center gap-2 max-w-md">
                 {autoFocusHardware ? (
-                  <span className="text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1">
+                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1">
                     <Check className="w-4 h-4 inline" />
                     Auto-Focus Aktif! Anda dapat langsung memindai tanpa mengeklik mouse.
                   </span>
                 ) : (
-                  <span>Kursor harus aktif di kotak di atas sebelum menembakkan scanner.</span>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      Kursor harus aktif di kotak di atas sebelum menembakkan scanner.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAutoFocusHardware(true);
+                        setTimeout(() => hardwareInputRef.current?.focus(), 50);
+                      }}
+                      className="px-3 py-1 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-lg border border-emerald-300 dark:border-emerald-800 transition-all shadow-sm"
+                    >
+                      Fokus Sekarang
+                    </button>
+                  </div>
                 )}
-              </p>
+              </div>
             </div>
 
             {/* TIPS DAN BANTUAN */}

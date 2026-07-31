@@ -3557,6 +3557,51 @@ export default function AdminPanel({
                   </p>
                 </div>
 
+                {/* TEMPLATE SERTIFIKAT PENGHARGAAN (SUPABASE STORAGE / CUSTOM URL) */}
+                <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-4 space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider mb-1">
+                      Template Sertifikat Penghargaan (URL Gambar Landscape / Supabase Storage)
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-3 items-start">
+                      <input
+                        type="text"
+                        value={settings.certificateTemplateUrl || ''}
+                        onChange={(e) => onUpdateSettings({ ...settings, certificateTemplateUrl: e.target.value })}
+                        placeholder="Contoh: https://kibpfprrjqqwsdqfgoxg.supabase.co/storage/v1/object/public/sertifikat/template-kosong.png"
+                        className="flex-1 w-full text-xs bg-white dark:bg-zinc-800 border border-emerald-300 dark:border-emerald-700/80 rounded-xl p-3 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm font-medium"
+                      />
+                      {settings.certificateTemplateUrl && settings.certificateTemplateUrl.trim() !== '' && (
+                        <div className="relative h-12 w-16 shrink-0 rounded-xl border border-zinc-200 dark:border-zinc-750 bg-white dark:bg-zinc-800 p-1 flex items-center justify-center overflow-hidden shadow-inner">
+                          <img 
+                            src={settings.certificateTemplateUrl} 
+                            alt="Pratinjau Template" 
+                            referrerPolicy="no-referrer"
+                            className="max-h-full max-w-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://placehold.co/100x60?text=Invalid';
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PANDUAN PENYIMPANAN DI SUPABASE STORAGE */}
+                  <div className="text-[11px] text-zinc-600 dark:text-zinc-300 bg-white/80 dark:bg-zinc-900/60 rounded-xl p-3 border border-emerald-200/60 dark:border-emerald-800/40 space-y-1.5 leading-relaxed">
+                    <p className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      💡 Petunjuk Menyimpan Template Sertifikat di Supabase Storage:
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1 pl-1 text-zinc-600 dark:text-zinc-400">
+                      <li>Buka dasbor proyek <span className="font-semibold text-zinc-800 dark:text-zinc-200">Supabase</span> Anda, lalu pilih menu <span className="font-semibold text-zinc-800 dark:text-zinc-200">Storage</span>.</li>
+                      <li>Buat bucket baru (misalnya dengan nama <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-emerald-600 dark:text-emerald-400">sertifikat</span>) dan aktifkan opsi <span className="font-semibold">Public Bucket</span> agar gambar dapat diakses secara publik.</li>
+                      <li>Upload file gambar template sertifikat kosong berorientasi <span className="font-semibold">Landscape A4 (JPG/PNG resolusi tinggi)</span>.</li>
+                      <li>Klik ikon <span className="font-semibold">Get Public URL / Copy URL</span> pada file gambar yang telah diupload di Supabase Storage.</li>
+                      <li>Tempel (<span className="font-semibold">Paste</span>) URL publik tersebut ke dalam kotak input di atas. Sistem akan otomatis mengisi nama peserta & pangkalan di atas template tersebut saat diunduh!</li>
+                    </ol>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">

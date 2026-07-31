@@ -144,6 +144,7 @@ export interface AppSettings {
   lokasiEvent?: string;
   pelaksanaEvent?: string;
   logoUrl?: string;
+  certificateTemplateUrl?: string;
   namaKetua?: string;
   namaSekretaris?: string;
   namaBendahara?: string;

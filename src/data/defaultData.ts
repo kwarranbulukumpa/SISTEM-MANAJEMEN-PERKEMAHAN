@@ -2037,6 +2037,7 @@ export const defaultSettings: AppSettings = {
   "lokasiEvent": "Bumi Perkemahan Anisia",
   "pelaksanaEvent": "Kwartir Ranting Bulukumpa",
   "logoUrl": "https://cdn.phototourl.com/free/2026-07-17-841eabe5-f9de-4a3c-96a5-7654a896e774.png",
+  "certificateTemplateUrl": "",
   "namaKetua": "Hendra, S.Pd",
   "namaSekretaris": "Ari Adam, S.Pd",
   "namaBendahara": "Eni Fadliliani, S.Pd",

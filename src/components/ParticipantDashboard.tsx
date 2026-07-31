@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, CheckCircle2, XCircle, Clock, MapPin, Award, ArrowLeft, Download, Bell, HelpCircle, Volume2, Megaphone, FileText, QrCode, History, Users, Maximize2, ExternalLink } from 'lucide-react';
 import { Peserta, Kegiatan, Kehadiran, AppSettings, Pengumuman, PangkalanDetail, AnggotaPramuka, DokumenKegiatan, formatIndonesianDate, formatIndonesianTime } from '../types';
 import { speakIndonesianText } from '../lib/tts';
-import { generateKartuAbsenPDF, generateBulkIdCardsPDF } from '../lib/pdf';
+import { generateKartuAbsenPDF, generateBulkIdCardsPDF, generateSertifikatKontingenPDF } from '../lib/pdf';
 import { User, Plus, Trash2, Save, RefreshCw, Smartphone, Check, AlertCircle, Printer } from 'lucide-react';
 
 interface ParticipantDashboardProps {
@@ -213,6 +213,7 @@ export default function ParticipantDashboard({
 
 
   const [isPrintingIdCards, setIsPrintingIdCards] = useState(false);
+  const [isPrintingSertifikat, setIsPrintingSertifikat] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   const handlePrintIdCards = async () => {
@@ -240,6 +241,28 @@ export default function ParticipantDashboard({
       alert(err.message || "Gagal mencetak ID Card.");
     } finally {
       setIsPrintingIdCards(false);
+    }
+  };
+
+  const handlePrintSertifikat = async () => {
+    setIsPrintingSertifikat(true);
+    try {
+      const pembinaData = myDetail.namaPembina && myDetail.namaPembina.trim() !== '' ? {
+        nama: myDetail.namaPembina,
+        hp: myDetail.hpPembina
+      } : null;
+      await generateSertifikatKontingenPDF(
+        currentPeserta.namaPangkalan,
+        pembinaData,
+        myDetail.anggota,
+        settings,
+        currentPeserta.namaLengkap
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Gagal mencetak Sertifikat.");
+    } finally {
+      setIsPrintingSertifikat(false);
     }
   };
 
@@ -720,6 +743,39 @@ export default function ParticipantDashboard({
             </button>
           </div>
 
+          {/* CARD: PRINT SERTIFIKAT KONTINGEN SECTION */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-150 dark:border-zinc-800 p-5 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 shrink-0">
+                <Award className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-tight">Cetak Sertifikat Kontingen (Format A4 Landscape)</h4>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xl">
+                  Cetak piagam/sertifikat resmi secara otomatis untuk <b>Pembina Pendamping</b> dan <b>seluruh Anggota Pramuka</b> dari Pangkalan Anda. Setiap halaman PDF akan otomatis menyesuaikan nama dan perannya (misal: <i>Sebagai Pembina Pangkalan SDN 334 Binuang</i> atau <i>Sebagai Peserta Perkemahan dari Pangkalan SDN 334 Binuang</i>).
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handlePrintSertifikat}
+              disabled={isPrintingSertifikat}
+              className="w-full md:w-auto shrink-0 bg-emerald-700 hover:bg-emerald-800 disabled:bg-emerald-700/50 text-white text-xs font-black py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
+            >
+              {isPrintingSertifikat ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white/35 border-t-white rounded-full animate-spin"></span>
+                  Membuat Sertifikat...
+                </>
+              ) : (
+                <>
+                  <Award className="w-4 h-4 text-white" />
+                  Cetak Sertifikat Sekarang
+                </>
+              )}
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* LEFT COLUMN: FORMS (5 COLS) */}
             <div className="lg:col-span-5 space-y-6">
@@ -1013,7 +1069,7 @@ export default function ParticipantDashboard({
             </div>
 
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xs mx-auto">
-              Silakan hadapkan layar HP Anda langsung ke kamera scanner panitia. Tingkatkan kecerahan layar HP jika scan sulit terbaca.
+              Silakan hadapkan layar HP Anda ke alat scanner fisik (barcode gun) atau kamera panitia. Tingkatkan kecerahan layar HP jika scan sulit terbaca.
             </p>
 
             <button

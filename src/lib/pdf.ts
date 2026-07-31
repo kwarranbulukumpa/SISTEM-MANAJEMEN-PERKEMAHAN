@@ -1219,3 +1219,206 @@ export async function generateJadwalKegiatanPDF(
 
   doc.save(`Jadwal_Kegiatan_Bulukumpa_${filterLevel.replace(/\s+/g, '_')}.pdf`);
 }
+
+/**
+ * Generates landscape A4 certificate(s) for Pembina and Peserta of a Pangkalan.
+ * Supports custom JPG/PNG template from Supabase Storage (settings.certificateTemplateUrl).
+ */
+export async function generateSertifikatKontingenPDF(
+  pangkalanName: string,
+  pembina: { nama: string; hp?: string } | null,
+  anggotaList: AnggotaPramuka[],
+  settings?: AppSettings,
+  fallbackPesertaNama?: string
+): Promise<void> {
+  const eventName = settings?.namaEvent || "Kemah Bakti & Lomba Pramuka Bulukumpa";
+  const eventOrganizer = settings?.pelaksanaEvent || "Kwartir Ranting Gerakan Pramuka Bulukumpa";
+  const eventLocation = settings?.lokasiEvent || "Bumi Perkemahan Anisia";
+
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const w = 297;
+  const h = 210;
+
+  // Load template image if provided
+  let templateImg: LoadedImage | null = null;
+  if (settings?.certificateTemplateUrl && settings.certificateTemplateUrl.trim() !== '') {
+    try {
+      templateImg = await loadLogoImage(settings.certificateTemplateUrl);
+    } catch (err) {
+      console.warn("Gagal memuat template sertifikat dari URL, menggunakan desain standar:", err);
+    }
+  }
+
+  // Load logo for fallback template header
+  let logoImg: LoadedImage | null = null;
+  if (!templateImg && settings?.logoUrl && settings.logoUrl.trim() !== '') {
+    try {
+      logoImg = await loadLogoImage(settings.logoUrl);
+    } catch (err) {
+      console.warn("Gagal memuat logo event untuk sertifikat:", err);
+    }
+  }
+
+  interface SertifikatRecipient {
+    nama: string;
+    peran: string;
+  }
+
+  const recipients: SertifikatRecipient[] = [];
+
+  if (pembina && pembina.nama && pembina.nama.trim() !== '') {
+    recipients.push({
+      nama: pembina.nama.trim(),
+      peran: `PEMBINA PRAMUKA ${pangkalanName.toUpperCase()}`
+    });
+  }
+
+  if (anggotaList && anggotaList.length > 0) {
+    anggotaList.forEach((a) => {
+      const namaAnggota = a.nama || (a as any).namaLengkap;
+      if (namaAnggota && namaAnggota.trim() !== '') {
+        recipients.push({
+          nama: namaAnggota.trim(),
+          peran: `PESERTA DARI ${pangkalanName.toUpperCase()}`
+        });
+      }
+    });
+  }
+
+  // Fallback if no pembina or anggota added yet
+  if (recipients.length === 0) {
+    recipients.push({
+      nama: fallbackPesertaNama || pangkalanName,
+      peran: `PESERTA DARI ${pangkalanName.toUpperCase()}`
+    });
+  }
+
+  recipients.forEach((recipient, idx) => {
+    if (idx > 0) {
+      doc.addPage('a4', 'l');
+    }
+
+    if (templateImg) {
+      // Draw user's custom JPG/PNG blank certificate template across full landscape A4
+      try {
+        doc.addImage(templateImg.data, 'JPEG', 0, 0, w, h);
+      } catch (e) {
+        console.warn("Gagal menggambar template sertifikat:", e);
+      }
+    } else {
+      // Draw elegant default fallback certificate border and decorations
+      doc.setDrawColor(16, 185, 129); // Emerald border
+      doc.setLineWidth(2.5);
+      doc.rect(10, 10, w - 20, h - 20);
+
+      doc.setDrawColor(217, 119, 6); // Gold inner border
+      doc.setLineWidth(0.8);
+      doc.rect(13, 13, w - 26, h - 26);
+
+      // Event Logo
+      if (logoImg) {
+        try {
+          doc.addImage(logoImg.data, 'JPEG', 28, 20, 24, 24);
+        } catch (e) {
+          console.warn("Gagal menggambar logo di sertifikat:", e);
+        }
+      }
+
+      // Header Titles
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(15, 118, 110);
+      doc.text(eventOrganizer.toUpperCase(), 148.5, 26, { align: 'center' });
+
+      doc.setFontSize(10.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text(eventName.toUpperCase(), 148.5, 33, { align: 'center' });
+
+      doc.setFontSize(30);
+      doc.setFont('times', 'bold');
+      doc.setTextColor(180, 83, 9);
+      doc.text("PIAGAM PENGHARGAAN", 148.5, 54, { align: 'center' });
+
+      doc.setFontSize(11.5);
+      doc.setFont('times', 'italic');
+      doc.setTextColor(100, 116, 139);
+      doc.text("Diberikan Kepada:", 148.5, 62, { align: 'center' });
+
+      doc.setDrawColor(217, 119, 6); // Amber 600
+      doc.setLineWidth(1.2);
+      doc.line(78, 84, 219, 84);
+
+      doc.setFont('times', 'italic');
+      doc.setFontSize(14);
+      doc.setTextColor(30, 41, 59);
+      doc.text("Sebagai", 148.5, 93, { align: 'center' });
+
+      // Appreciation Footer Sentence
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(11);
+      doc.setTextColor(71, 85, 105);
+      doc.text(
+        `Atas partisipasi aktif, semangat, dan dedikasinya dalam menyukseskan kegiatan ${eventName}.`,
+        148.5,
+        130,
+        { align: 'center' }
+      );
+
+      // Signatures at Bottom
+      const sigY = 162;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59);
+
+      // Left signature
+      doc.text('Mengetahui,', 55, sigY, { align: 'center' });
+      doc.setFont('helvetica', 'bold');
+      doc.text('Ketua Kwartir Ranting', 55, sigY + 5.5, { align: 'center' });
+      doc.text(settings?.namaKetua || 'Kak Syamsuddin, S.Pd', 55, sigY + 24, { align: 'center' });
+      doc.setDrawColor(30, 41, 59);
+      doc.setLineWidth(0.4);
+      doc.line(25, sigY + 25.5, 85, sigY + 25.5);
+
+      // Right signature
+      const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${eventLocation}, ${dateStr}`, w - 55, sigY, { align: 'center' });
+      doc.setFont('helvetica', 'bold');
+      doc.text('Ketua Panitia Pelaksana', w - 55, sigY + 5.5, { align: 'center' });
+      doc.text(settings?.namaSekretaris || 'Kak Hendra, S.Pd', w - 55, sigY + 24, { align: 'center' });
+      doc.line(w - 85, sigY + 25.5, w - 25, sigY + 25.5);
+    }
+
+    // --- RECIPIENT NAME (Positioned above the decorative line at Y = 75) ---
+    doc.setFont('helvetica', 'bolditalic');
+    const nameLen = recipient.nama.length;
+    if (nameLen > 30) {
+      doc.setFontSize(20);
+    } else if (nameLen > 22) {
+      doc.setFontSize(24);
+    } else {
+      doc.setFontSize(28);
+    }
+    doc.setTextColor(15, 32, 67); // Dark Navy Blue
+    doc.text(recipient.nama.toUpperCase(), 148.5, 75, { align: 'center' });
+
+    // --- RECIPIENT ROLE & PANGKALAN (Positioned below "Sebagai" at Y = 101) ---
+    doc.setFont('helvetica', 'bolditalic');
+    const roleLen = recipient.peran.length;
+    if (roleLen > 50) {
+      doc.setFontSize(14);
+    } else {
+      doc.setFontSize(16);
+    }
+    doc.setTextColor(15, 32, 67); // Dark Navy Blue
+    doc.text(recipient.peran, 148.5, 101, { align: 'center' });
+  });
+
+  const safeName = pangkalanName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  doc.save(`Sertifikat_Kontingen_${safeName}.pdf`);
+}
