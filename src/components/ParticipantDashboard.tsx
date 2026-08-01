@@ -256,7 +256,7 @@ export default function ParticipantDashboard({
         pembinaData,
         myDetail.anggota,
         settings,
-        currentPeserta.namaLengkap,
+        undefined,
         currentPeserta.tingkatan
       );
     } catch (err: any) {
@@ -850,7 +850,7 @@ export default function ParticipantDashboard({
 
                   <button
                     type="submit"
-                    className="w-full bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Tambah Anggota Ke Regu

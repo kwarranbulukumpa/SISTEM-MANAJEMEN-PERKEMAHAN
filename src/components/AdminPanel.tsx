@@ -15,7 +15,7 @@ import { Peserta, Kegiatan, Kehadiran, Admin, AuditLog, AppSettings, Pengumuman,
 import ScannerComponent from './ScannerComponent';
 import SupabaseSyncPanel from './SupabaseSyncPanel';
 import { speakIndonesianText } from '../lib/tts';
-import { generateKartuAbsenPDF, generateLaporanPDF, generateJadwalKegiatanPDF } from '../lib/pdf';
+import { generateKartuAbsenPDF, generateLaporanPDF, generateJadwalKegiatanPDF, generateDataPangkalanPDF } from '../lib/pdf';
 
 interface AdminPanelProps {
   currentAdmin: Admin;
@@ -507,7 +507,7 @@ export default function AdminPanel({
   const [isImportOpen, setIsImportOpen] = useState(false);
 
   const filteredPeserta = useMemo(() => {
-    return peserta.filter(p => {
+    const filtered = peserta.filter(p => {
       const actualTingkatan = p.tingkatan || 'Penggalang SD (SD/MI)';
       const actualJk = p.jenisKelamin || 'Putra';
       
@@ -525,6 +525,44 @@ export default function AdminPanel({
                             (filterStatus === 'Nonaktif' && !p.statusAktif);
                             
       return matchesSearch && matchesJk && matchesTingkatan && matchesStatus;
+    });
+
+    return filtered.sort((a, b) => {
+      // 1. Urutkan sesuai dengan Nama Pangkalan mulai dari SD/MI kemudian SMP/MTs lalu SMA/SMK/MA
+      const getTingkatanRank = (tingkatan: string, nama: string) => {
+        const text = `${tingkatan} ${nama}`.toLowerCase();
+        if (text.includes('sd') || text.includes('mi')) return 1;
+        if (text.includes('smp') || text.includes('mts')) return 2;
+        if (text.includes('sma') || text.includes('smk') || text.includes('ma') || text.includes('penegak')) return 3;
+        return 4;
+      };
+
+      const rankA = getTingkatanRank(a.tingkatan || '', a.namaPangkalan || '');
+      const rankB = getTingkatanRank(b.tingkatan || '', b.namaPangkalan || '');
+      if (rankA !== rankB) {
+        return rankA - rankB;
+      }
+
+      // 2. Urutkan berdasarkan Nomor Sekolah berdasarkan jumlah (misal SD Negeri 58 lebih dulu dari SD Negeri 175)
+      const getSchoolNumber = (name: string) => {
+        const match = name.match(/\d+/);
+        return match ? parseInt(match[0], 10) : Infinity;
+      };
+
+      const numA = getSchoolNumber(a.namaPangkalan || '');
+      const numB = getSchoolNumber(b.namaPangkalan || '');
+      if (numA !== numB) {
+        return numA - numB;
+      }
+
+      // 3. Alphabetical fallback
+      const nameCompare = (a.namaPangkalan || '').localeCompare(b.namaPangkalan || '', 'id', { sensitivity: 'base' });
+      if (nameCompare !== 0) {
+        return nameCompare;
+      }
+
+      // 4. Putra sebelum Putri
+      return (a.jenisKelamin === 'Putra' ? 0 : 1) - (b.jenisKelamin === 'Putra' ? 0 : 1);
     });
   }, [peserta, searchPeserta, filterJk, filterTingkatan, filterStatus]);
 
@@ -603,6 +641,25 @@ export default function AdminPanel({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDownloadDataPangkalanPDF = async () => {
+    try {
+      await generateDataPangkalanPDF(
+        filteredPeserta,
+        pangkalanDetails || [],
+        {
+          search: searchPeserta,
+          jk: filterJk,
+          tingkatan: filterTingkatan,
+          status: filterStatus
+        },
+        settings
+      );
+    } catch (error) {
+      console.error("Gagal mengunduh PDF Data Pangkalan:", error);
+      alert("Gagal mengunduh PDF Data Pangkalan.");
+    }
   };
 
   const handleImportCsv = () => {
@@ -1586,6 +1643,14 @@ export default function AdminPanel({
                   <Download className="w-4 h-4" />
                   Export CSV
                 </button>
+                <button
+                  onClick={handleDownloadDataPangkalanPDF}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center gap-1 transition-colors shadow-sm"
+                  title="Unduh PDF Data Pangkalan, Pembina & Daftar Peserta (Sesuai Filter)"
+                >
+                  <FileText className="w-4 h-4" />
+                  Unduh PDF
+                </button>
               </div>
             </div>
 
@@ -1721,48 +1786,62 @@ export default function AdminPanel({
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-zinc-700 dark:text-zinc-300">
                   {filteredPeserta.length > 0 ? (
-                    filteredPeserta.map((p, idx) => (
-                      <tr key={`${p.idPeserta}_${idx}`} className={`hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40 border-l-4 ${
-                        p.jenisKelamin === 'Putra' ? 'border-l-blue-500' : 'border-l-rose-500'
-                      }`}>
-                        <td className="p-3 font-bold font-mono text-emerald-800 dark:text-emerald-500">{p.idPeserta}</td>
-                        <td className="p-3 font-semibold flex items-center gap-2">
-                          <span className={`text-base ${p.jenisKelamin === 'Putra' ? 'text-blue-500' : 'text-rose-500'}`}>
-                            {p.jenisKelamin === 'Putra' ? '👦' : '👧'}
-                          </span>
-                          <span>{p.namaPangkalan}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                            {p.tingkatan || 'Penggalang SD (SD/MI)'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            p.jenisKelamin === 'Putra' 
-                              ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/30 dark:text-blue-400' 
-                              : 'bg-rose-50 text-rose-800 dark:bg-rose-950/30 dark:text-rose-400'
-                          }`}>
-                            {p.jenisKelamin === 'Putra' ? 'Putra (Pa)' : 'Putri (Pi)'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className="px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-mono text-xs border border-zinc-200 dark:border-zinc-700 tracking-wide">
-                            {p.kodeQr || '-'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`inline-block w-2.5 h-2.5 rounded-full ${p.statusAktif ? 'bg-emerald-500' : 'bg-zinc-300'}`}></span>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => setViewingPangkalan(p)}
-                              className="p-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/40 rounded text-indigo-600 dark:text-indigo-400"
-                              title="Lihat Data Pangkalan (Pembina & Anggota)"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
+                    filteredPeserta.map((p, idx) => {
+                      const detail = pangkalanDetails?.find(d => d.idPeserta === p.idPeserta);
+                      const hasPembina = Boolean(detail?.namaPembina && detail.namaPembina.trim() !== '');
+                      const validAnggotaCount = (detail?.anggota || []).filter(a => a.nama && a.nama.trim() !== '').length;
+                      const isCompletePangkalan = hasPembina && validAnggotaCount >= 8;
+
+                      return (
+                        <tr key={`${p.idPeserta}_${idx}`} className={`hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40 border-l-4 ${
+                          p.jenisKelamin === 'Putra' ? 'border-l-blue-500' : 'border-l-rose-500'
+                        }`}>
+                          <td className="p-3 font-bold font-mono text-emerald-800 dark:text-emerald-500">{p.idPeserta}</td>
+                          <td className="p-3 font-semibold flex items-center gap-2">
+                            <span className={`text-base ${p.jenisKelamin === 'Putra' ? 'text-blue-500' : 'text-rose-500'}`}>
+                              {p.jenisKelamin === 'Putra' ? '👦' : '👧'}
+                            </span>
+                            <span>{p.namaPangkalan}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                              {p.tingkatan || 'Penggalang SD (SD/MI)'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              p.jenisKelamin === 'Putra' 
+                                ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/30 dark:text-blue-400' 
+                                : 'bg-rose-50 text-rose-800 dark:bg-rose-950/30 dark:text-rose-400'
+                            }`}>
+                              {p.jenisKelamin === 'Putra' ? 'Putra (Pa)' : 'Putri (Pi)'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-mono text-xs border border-zinc-200 dark:border-zinc-700 tracking-wide">
+                              {p.kodeQr || '-'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`inline-block w-2.5 h-2.5 rounded-full ${p.statusAktif ? 'bg-emerald-500' : 'bg-zinc-300'}`}></span>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => setViewingPangkalan(p)}
+                                className={`p-1.5 rounded transition-all ${
+                                  isCompletePangkalan
+                                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-sm font-bold'
+                                    : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400'
+                                }`}
+                                title={
+                                  isCompletePangkalan
+                                    ? `Lihat Data Pangkalan (Lengkap: Pembina & ${validAnggotaCount} Anggota)`
+                                    : 'Lihat Data Pangkalan (Pembina & Anggota)'
+                                }
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
                             <button
                               onClick={() => setSelectedPesertaForQr(p)}
                               className="p-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300"
@@ -1794,7 +1873,8 @@ export default function AdminPanel({
                           </div>
                         </td>
                       </tr>
-                    ))
+                    );
+                    })
                   ) : (
                     <tr key="empty-filtered-peserta">
                       <td colSpan={7} className="p-6 text-center text-zinc-400 italic">

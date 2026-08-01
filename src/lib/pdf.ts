@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
-import { Peserta, Kehadiran, AnggotaPramuka, Kegiatan, AppSettings, formatIndonesianDate, formatIndonesianTime, getTingkatanFromSekolah } from '../types';
+import { Peserta, Kehadiran, AnggotaPramuka, Kegiatan, AppSettings, PangkalanDetail, formatIndonesianDate, formatIndonesianTime, getTingkatanFromSekolah } from '../types';
 
 /**
  * Helper to generate 1D Code128 Barcode as PNG Data URL for ID cards.
@@ -1452,3 +1452,255 @@ export async function generateSertifikatKontingenPDF(
   const safeName = pangkalanName.replace(/[^a-zA-Z0-9_-]/g, '_');
   doc.save(`Sertifikat_Kontingen_${safeName}.pdf`);
 }
+
+/**
+ * Generate PDF Data Pangkalan, Pembina & Daftar Nama Peserta (Sesuai Filter)
+ */
+export async function generateDataPangkalanPDF(
+  pesertaList: Peserta[],
+  pangkalanDetails: PangkalanDetail[],
+  filters: {
+    search?: string;
+    jk?: string;
+    tingkatan?: string;
+    status?: string;
+  },
+  settings?: AppSettings
+): Promise<void> {
+  const eventName = settings?.namaEvent || "Kemah Bakti & Lomba Pramuka Kwartir Bulukumpa";
+  const eventLocation = settings?.lokasiEvent || "Bumi Perkemahan Bulukumpa";
+  const eventOrganizer = settings?.pelaksanaEvent || "Kwartir Ranting Gerakan Pramuka Bulukumpa";
+
+  let logoImg: LoadedImage | null = null;
+  if (settings?.logoUrl && settings.logoUrl.trim() !== "") {
+    try {
+      logoImg = await loadLogoImage(settings.logoUrl);
+    } catch (e) {
+      console.error("Gagal memuat logo kegiatan:", e);
+    }
+  }
+
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const w = 297;
+  const h = 210;
+
+  const drawHeader = (pageNumber: number) => {
+    if (logoImg && logoImg.data) {
+      try {
+        const ratio = logoImg.width / logoImg.height || 1;
+        let logoW = 15;
+        let logoH = 15 / ratio;
+        if (logoH > 15) {
+          logoH = 15;
+          logoW = 15 * ratio;
+        }
+        doc.addImage(logoImg.data, 'JPEG', 12, 10, logoW, logoH);
+      } catch (err) {
+        console.warn("Gagal merender logo ke header PDF Data Pangkalan:", err);
+      }
+    }
+
+    doc.setDrawColor(6, 95, 70); // Emerald Green
+    doc.setLineWidth(1);
+    doc.line(12, 8, w - 12, 8);
+    doc.setLineWidth(0.3);
+    doc.line(12, 9.5, w - 12, 9.5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(17, 24, 39);
+    doc.text('DATA DATABASE PANGKALAN & PESERTA PERKEMAHAN', w / 2, 16, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(55, 65, 81);
+    doc.text(eventName.toUpperCase(), w / 2, 21, { align: 'center', maxWidth: w - 24 });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(107, 114, 128);
+    const printedAt = new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'medium' });
+    doc.text(`Pelaksana: ${eventOrganizer} | Lokasi: ${eventLocation} | Dicetak pada: ${printedAt} WITA`, w / 2, 25.5, { align: 'center', maxWidth: w - 24 });
+
+    doc.text(`Halaman ${pageNumber}`, w - 12, 25.5, { align: 'right' });
+
+    doc.setDrawColor(209, 213, 219);
+    doc.setLineWidth(0.5);
+    doc.line(12, 28, w - 12, 28);
+  };
+
+  let pageNum = 1;
+  drawHeader(pageNum);
+
+  const totalPembinaCount = pesertaList.filter(p => {
+    const d = pangkalanDetails.find(pd => pd.idPeserta === p.idPeserta);
+    return Boolean(d?.namaPembina && d.namaPembina.trim() !== '');
+  }).length;
+
+  const totalAnggotaCount = pesertaList.reduce((acc, p) => {
+    const d = pangkalanDetails.find(pd => pd.idPeserta === p.idPeserta);
+    const valid = (d?.anggota || []).filter(a => a.nama && a.nama.trim() !== '').length;
+    return acc + valid;
+  }, 0);
+
+  doc.setFillColor(243, 244, 246);
+  doc.roundedRect(12, 31, w - 24, 18, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(55, 65, 81);
+
+  doc.text(`Filter Kata Kunci: ${filters.search || 'Semua'}`, 16, 36.5);
+  doc.text(`Filter Tingkatan: ${filters.tingkatan || 'Semua'}`, 16, 42);
+  doc.text(`Kategori Regu: ${filters.jk || 'Semua'}`, 110, 36.5);
+  doc.text(`Status Pangkalan: ${filters.status || 'Semua'}`, 110, 42);
+  doc.text(`Total Terfilter: ${pesertaList.length} Pangkalan/Regu | Total Pembina Diinput: ${totalPembinaCount} Org | Total Anggota Peserta Diinput: ${totalAnggotaCount} Org`, 16, 46.5);
+
+  let y = 53;
+  const colX = [12, 22, 40, 92, 124, 138, 183, 258, 271];
+  const colW = [10, 18, 52, 32, 14, 45, 75, 13, 14];
+  const headers = ['No', 'ID Peserta', 'Nama Pangkalan', 'Tingkatan', 'Kat.', 'Pembina Pendamping', 'Daftar Nama Peserta (Anggota Regu)', 'Jml', 'Status'];
+
+  const drawTableHeader = (currentY: number) => {
+    doc.setFillColor(6, 95, 70); // Emerald Green
+    doc.roundedRect(12, currentY, w - 24, 7, 1, 1, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+
+    headers.forEach((h, index) => {
+      if (index === 4 || index === 7 || index === 8) {
+        doc.text(h, colX[index] + colW[index] / 2, currentY + 4.8, { align: 'center' });
+      } else {
+        doc.text(h, colX[index] + 2, currentY + 4.8);
+      }
+    });
+  };
+
+  drawTableHeader(y);
+  y += 7;
+
+  doc.setFontSize(7.5);
+  doc.setTextColor(31, 41, 55);
+
+  if (pesertaList.length === 0) {
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(156, 163, 175);
+    doc.text('Tidak ada data pangkalan yang sesuai dengan filter yang aktif...', w / 2, y + 10, { align: 'center' });
+    y += 18;
+  } else {
+    pesertaList.forEach((p, i) => {
+      const detail = pangkalanDetails.find(pd => pd.idPeserta === p.idPeserta);
+      const anggotaList = (detail?.anggota || []).filter(a => a.nama && a.nama.trim() !== '');
+
+      const pangkalanText = p.namaPangkalan || '-';
+      const tingkatanText = p.tingkatan || getTingkatanFromSekolah(p.namaPangkalan) || '-';
+      const pembinaName = detail?.namaPembina && detail.namaPembina.trim() !== '' ? detail.namaPembina.trim() : '- (Belum Diinput)';
+      const pembinaHp = detail?.hpPembina && detail.hpPembina.trim() !== '' ? `HP: ${detail.hpPembina.trim()}` : '';
+      const pembinaText = pembinaHp ? `${pembinaName}\n${pembinaHp}` : pembinaName;
+
+      const anggotaText = anggotaList.length > 0
+        ? anggotaList.map((a, idx) => `${idx + 1}. ${a.nama.trim()}`).join('\n')
+        : '- (Belum ada anggota)';
+
+      doc.setFontSize(7.5);
+      const pangkalanLines = doc.splitTextToSize(pangkalanText, colW[2] - 3);
+      const tingkatanLines = doc.splitTextToSize(tingkatanText, colW[3] - 3);
+      const pembinaLines = doc.splitTextToSize(pembinaText, colW[5] - 3);
+      const anggotaLines = doc.splitTextToSize(anggotaText, colW[6] - 3);
+
+      const maxLines = Math.max(pangkalanLines.length, tingkatanLines.length, pembinaLines.length, anggotaLines.length, 1);
+      const rowHeight = Math.max(6.5, 3 + maxLines * 3.2);
+
+      if (y + rowHeight > 185) {
+        doc.addPage();
+        pageNum++;
+        drawHeader(pageNum);
+        y = 33;
+        drawTableHeader(y);
+        y += 7;
+        doc.setFontSize(7.5);
+        doc.setTextColor(31, 41, 55);
+      }
+
+      if (i % 2 === 1) {
+        doc.setFillColor(249, 250, 251);
+        doc.rect(12, y, w - 24, rowHeight, 'F');
+      }
+
+      doc.setDrawColor(229, 231, 235);
+      doc.setLineWidth(0.2);
+      doc.line(12, y + rowHeight, w - 12, y + rowHeight);
+
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(i + 1), colX[0] + 2, y + 4.5);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text(p.idPeserta || '-', colX[1] + 2, y + 4.5);
+
+      doc.text(pangkalanLines, colX[2] + 2, y + 4.5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.text(tingkatanLines, colX[3] + 2, y + 4.5);
+
+      const katText = p.jenisKelamin === 'Putra' ? 'Pa' : 'Pi';
+      doc.text(katText, colX[4] + colW[4] / 2, y + 4.5, { align: 'center' });
+
+      doc.text(pembinaLines, colX[5] + 2, y + 4.5);
+      doc.text(anggotaLines, colX[6] + 2, y + 4.5);
+
+      doc.text(String(anggotaList.length), colX[7] + colW[7] / 2, y + 4.5, { align: 'center' });
+
+      doc.setFont('helvetica', 'bold');
+      if (p.statusAktif) {
+        doc.setTextColor(5, 150, 105);
+        doc.text('Aktif', colX[8] + colW[8] / 2, y + 4.5, { align: 'center' });
+      } else {
+        doc.setTextColor(220, 38, 38);
+        doc.text('Nonaktif', colX[8] + colW[8] / 2, y + 4.5, { align: 'center' });
+      }
+      doc.setTextColor(31, 41, 55);
+      doc.setFont('helvetica', 'normal');
+
+      y += rowHeight;
+    });
+  }
+
+  if (y > 155) {
+    doc.addPage();
+    pageNum++;
+    drawHeader(pageNum);
+    y = 33;
+  }
+
+  y += 10;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(31, 41, 55);
+
+  const chairmanName = settings?.namaKetua || "............................................";
+  const secretaryName = settings?.namaSekretaris || "............................................";
+
+  doc.text('Mengetahui,', 30, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Ketua Panitia Pelaksana', 30, y + 4.5);
+  doc.text(chairmanName, 30, y + 25);
+  doc.line(30, y + 26, 85, y + 26);
+
+  const formattedDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  doc.text(`Bulukumpa, ${formattedDate}`, w - 80, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Sekretaris Panitia', w - 80, y + 4.5);
+  doc.text(secretaryName, w - 80, y + 25);
+  doc.line(w - 80, y + 26, w - 25, y + 26);
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  doc.save(`Data_Pangkalan_Peserta_${dateStr}.pdf`);
+}
+
