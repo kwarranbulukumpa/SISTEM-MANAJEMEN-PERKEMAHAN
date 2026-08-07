@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, CheckCircle2, XCircle, Clock, MapPin, Award, ArrowLeft, Download, Bell, HelpCircle, Volume2, Megaphone, FileText, QrCode, History, Users, Maximize2, ExternalLink } from 'lucide-react';
-import { Peserta, Kegiatan, Kehadiran, AppSettings, Pengumuman, PangkalanDetail, AnggotaPramuka, DokumenKegiatan, formatIndonesianDate, formatIndonesianTime } from '../types';
+import { Peserta, Kegiatan, Kehadiran, AppSettings, Pengumuman, PangkalanDetail, AnggotaPramuka, DokumenKegiatan, formatIndonesianDate, formatIndonesianTime, getTingkatanFromSekolah } from '../types';
 import { speakIndonesianText } from '../lib/tts';
 import { generateKartuAbsenPDF, generateBulkIdCardsPDF, generateSertifikatKontingenPDF } from '../lib/pdf';
 import { User, Plus, Trash2, Save, RefreshCw, Smartphone, Check, AlertCircle, Printer } from 'lucide-react';
@@ -68,21 +68,31 @@ export default function ParticipantDashboard({
     });
   };
 
+  // Participant's level / tingkatan
+  const participantTingkatan = currentPeserta.tingkatan || getTingkatanFromSekolah(currentPeserta.namaPangkalan);
+
   // Filter active announcements relevant for this participant
   const activeAnnouncements = announcements.filter(ann => 
     ann.statusAktif && 
-    (ann.tingkatanTarget === 'Semua' || ann.tingkatanTarget === currentPeserta.tingkatan)
+    (ann.tingkatanTarget === 'Semua' || ann.tingkatanTarget === currentPeserta.tingkatan || ann.tingkatanTarget === participantTingkatan)
   );
 
+  // Filter activities that match this participant's tingkatan (or general activities for all tingkatan)
+  const myKegiatan = useMemo(() => {
+    return kegiatan
+      .filter(k => !k.tingkatan || k.tingkatan.length === 0 || k.tingkatan.includes(participantTingkatan as any))
+      .sort((a, b) => a.urutan - b.urutan);
+  }, [kegiatan, participantTingkatan]);
+
   // Calculations for Participant Attendance
-  const finishedKegiatans = kegiatan.filter(k => k.status === 'Selesai');
+  const finishedKegiatans = myKegiatan.filter(k => k.status === 'Selesai');
   const totalKegiatanCount = finishedKegiatans.length;
   
   // Participant's logs
   const myKehadiran = kehadiran.filter(h => h.idPeserta === currentPeserta.idPeserta);
   
   // History shows finished events OR any events where participant has successfully checked in
-  const historyKegiatans = kegiatan.filter(k => 
+  const historyKegiatans = myKegiatan.filter(k => 
     k.status === 'Selesai' || 
     myKehadiran.some(h => h.idKegiatan === k.idKegiatan)
   );
@@ -94,7 +104,7 @@ export default function ParticipantDashboard({
   const attendanceRate = totalKegiatanCount > 0 ? Math.round((myHadirCount / totalKegiatanCount) * 100) : 100;
 
   // Next Event Calculation
-  const upcomingEvents = kegiatan
+  const upcomingEvents = myKegiatan
     .filter(k => k.status === 'Aktif')
     .sort((a, b) => a.urutan - b.urutan);
   const nextEvent = upcomingEvents[0];
@@ -587,55 +597,78 @@ export default function ParticipantDashboard({
       {/* TAB CONTENT: JADWAL */}
       {activeTab === 'jadwal' && (
         <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 p-6 shadow-sm" id="tab-participant-schedule">
-          <h3 className="font-bold text-sm tracking-wider text-zinc-700 dark:text-zinc-300 uppercase mb-4">
-            Jadwal Lengkap Kegiatan Perkemahan
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div>
+              <h3 className="font-bold text-sm tracking-wider text-zinc-700 dark:text-zinc-300 uppercase">
+                Jadwal Lengkap Kegiatan Perkemahan
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Menampilkan jadwal kegiatan khusus untuk tingkatan <span className="font-bold text-emerald-600 dark:text-emerald-400">{participantTingkatan}</span>
+              </p>
+            </div>
+            <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300/50 dark:border-emerald-800">
+              {participantTingkatan}
+            </span>
+          </div>
 
           <div className="space-y-4">
-            {kegiatan.map((item, idx) => {
-              // Color matching logic based on status
-              let borderClass = "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50";
-              let statusLabel = "Selesai";
-              let statusBadge = "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400";
-              
-              if (item.status === 'Aktif') {
-                borderClass = "border-emerald-500/50 bg-emerald-50/20 dark:bg-emerald-950/10 animate-pulse";
-                statusLabel = "Aktif";
-                statusBadge = "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 font-bold";
-              }
+            {myKegiatan.length === 0 ? (
+              <div className="text-center py-10 px-4 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                <Calendar className="w-9 h-9 text-zinc-300 dark:text-zinc-600 mx-auto mb-2" />
+                <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">Belum Ada Jadwal Kegiatan</p>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Belum ada jadwal kegiatan perkemahan yang dikhususkan untuk tingkatan <span className="font-semibold text-emerald-600 dark:text-emerald-400">{participantTingkatan}</span>.
+                </p>
+              </div>
+            ) : (
+              myKegiatan.map((item, idx) => {
+                // Color matching logic based on status
+                let borderClass = "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50";
+                let statusLabel = "Selesai";
+                let statusBadge = "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400";
+                
+                if (item.status === 'Aktif') {
+                  borderClass = "border-emerald-500/50 bg-emerald-50/20 dark:bg-emerald-950/10 animate-pulse";
+                  statusLabel = "Aktif";
+                  statusBadge = "bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 font-bold";
+                }
 
-              return (
-                <div key={`${item.idKegiatan}_${idx}`} className={`border p-4 rounded-xl transition-colors ${borderClass}`}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-semibold text-zinc-500">{item.idKegiatan}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded uppercase tracking-wide ${statusBadge}`}>
-                          {statusLabel}
-                        </span>
+                return (
+                  <div key={`${item.idKegiatan}_${idx}`} className={`border p-4 rounded-xl transition-colors ${borderClass}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-semibold text-zinc-500">{item.idKegiatan}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded uppercase tracking-wide ${statusBadge}`}>
+                            {statusLabel}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded uppercase tracking-wide bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium border border-zinc-200 dark:border-zinc-700">
+                            {item.tingkatan && item.tingkatan.length > 0 ? item.tingkatan.join(', ') : 'Semua Tingkatan'}
+                          </span>
+                        </div>
+                        <h4 className="text-base font-bold text-zinc-800 dark:text-zinc-200 mt-1">{item.namaKegiatan}</h4>
+                        
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-zinc-500">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                            {item.hari}, {formatIndonesianTime(item.jamMulai)} - {formatIndonesianTime(item.jamSelesai)} WITA
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                            {item.lokasi}
+                          </span>
+                        </div>
                       </div>
-                      <h4 className="text-base font-bold text-zinc-800 dark:text-zinc-200 mt-1">{item.namaKegiatan}</h4>
-                      
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-zinc-500">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                          {item.hari}, {formatIndonesianTime(item.jamMulai)} - {formatIndonesianTime(item.jamSelesai)} WITA
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-zinc-400" />
-                          {item.lokasi}
-                        </span>
-                      </div>
-                    </div>
 
-                    <div className="text-right">
-                      <span className="text-[10px] uppercase font-mono block text-zinc-400">URUTAN KEGIATAN</span>
-                      <span className="text-sm font-black text-emerald-800 dark:text-emerald-500">#{item.urutan}</span>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-mono block text-zinc-400">URUTAN KEGIATAN</span>
+                        <span className="text-sm font-black text-emerald-800 dark:text-emerald-500">#{item.urutan}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
       )}
