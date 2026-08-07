@@ -79,9 +79,50 @@ export default function ParticipantDashboard({
 
   // Filter activities that match this participant's tingkatan (or general activities for all tingkatan)
   const myKegiatan = useMemo(() => {
+    const dayOrder: Record<string, number> = {
+      'Senin': 1,
+      'Selasa': 2,
+      'Rabu': 3,
+      'Kamis': 4,
+      'Jumat': 5,
+      'Sabtu': 6,
+      'Minggu': 7
+    };
+
     return kegiatan
       .filter(k => !k.tingkatan || k.tingkatan.length === 0 || k.tingkatan.includes(participantTingkatan as any))
-      .sort((a, b) => a.urutan - b.urutan);
+      .sort((a, b) => {
+        // 1. Urutkan berdasarkan Tanggal jika ada
+        const dateA = a.tanggal || '';
+        const dateB = b.tanggal || '';
+        if (dateA && dateB && dateA !== dateB) {
+          return dateA.localeCompare(dateB);
+        }
+
+        // 2. Urutkan berdasarkan Hari jika tanggal sama / tidak ada
+        const dayA = dayOrder[a.hari] || 99;
+        const dayB = dayOrder[b.hari] || 99;
+        if (dayA !== dayB) {
+          return dayA - dayB;
+        }
+
+        // 3. Urutkan berdasarkan Waktu Mulai (jamMulai)
+        const timeA = a.jamMulai || '00:00';
+        const timeB = b.jamMulai || '00:00';
+        if (timeA !== timeB) {
+          return timeA.localeCompare(timeB);
+        }
+
+        // 4. Urutkan berdasarkan Waktu Selesai (jamSelesai)
+        const endTimeA = a.jamSelesai || '00:00';
+        const endTimeB = b.jamSelesai || '00:00';
+        if (endTimeA !== endTimeB) {
+          return endTimeA.localeCompare(endTimeB);
+        }
+
+        // 5. Fallback ke nomor urutan
+        return (a.urutan || 0) - (b.urutan || 0);
+      });
   }, [kegiatan, participantTingkatan]);
 
   // Calculations for Participant Attendance
@@ -104,9 +145,7 @@ export default function ParticipantDashboard({
   const attendanceRate = totalKegiatanCount > 0 ? Math.round((myHadirCount / totalKegiatanCount) * 100) : 100;
 
   // Next Event Calculation
-  const upcomingEvents = myKegiatan
-    .filter(k => k.status === 'Aktif')
-    .sort((a, b) => a.urutan - b.urutan);
+  const upcomingEvents = myKegiatan.filter(k => k.status === 'Aktif');
   const nextEvent = upcomingEvents[0];
 
   // Simulated countdown state for next event
