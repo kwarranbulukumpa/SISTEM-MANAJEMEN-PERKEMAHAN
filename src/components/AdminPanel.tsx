@@ -8,7 +8,8 @@ import {
   Users, Calendar, CheckSquare, FileBarChart2, Settings, Code2, LogOut,
   Plus, Edit2, Trash2, Search, Filter, Download, Upload, Printer, AlertTriangle,
   UserPlus, Shield, Activity, RefreshCw, Eye, Check, AlertCircle, FileText, Megaphone, Volume2, X,
-  Home, School, UserCheck, ExternalLink, Award, QrCode, Database, Cloud, Play, CheckCircle
+  Home, School, UserCheck, ExternalLink, Award, QrCode, Database, Cloud, Play, CheckCircle,
+  Sparkles, Heart, Star
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Peserta, Kegiatan, Kehadiran, Admin, AuditLog, AppSettings, Pengumuman, PangkalanDetail, DokumenKegiatan, formatIndonesianDate, formatIndonesianTime, getTingkatanFromSekolah } from '../types';
@@ -435,7 +436,10 @@ export default function AdminPanel({
     });
   }, [kegiatan, kehadiran, peserta]);
 
-  // Top 3 Most Active Participants by Level
+  // Filter gender state for top active participants section
+  const [topGenderFilter, setTopGenderFilter] = useState<'Semua' | 'Putra' | 'Putri'>('Semua');
+
+  // Top 3 Most Active Participants by Level and Gender (Separated)
   const topParticipantsByLevel = useMemo(() => {
     const levels = [
       'Penggalang SD (SD/MI)',
@@ -447,44 +451,122 @@ export default function AdminPanel({
       // Only include active participants
       const levelPeserta = peserta.filter(p => p.tingkatan === level && p.statusAktif !== false);
 
-      const rated = levelPeserta.map(p => {
-        const pKehadiran = kehadiran.filter(h => h.idPeserta === p.idPeserta && h.statusHadir === 'Hadir');
-        const count = pKehadiran.length;
+      const rateParticipants = (list: Peserta[]) => {
+        const rated = list.map(p => {
+          const pKehadiran = kehadiran.filter(h => h.idPeserta === p.idPeserta && h.statusHadir === 'Hadir');
+          const count = pKehadiran.length;
 
-        // Sum of check-in times in seconds since midnight for tie-breaking
-        const sumSeconds = pKehadiran.reduce((sum, h) => {
-          try {
-            const parts = h.jam.split(':');
-            const hours = parseInt(parts[0], 10) || 0;
-            const minutes = parseInt(parts[1], 10) || 0;
-            const seconds = parseInt(parts[2], 10) || 0;
-            return sum + (hours * 3600) + (minutes * 60) + seconds;
-          } catch (e) {
-            return sum;
+          // Sum of check-in times in seconds since midnight for tie-breaking
+          const sumSeconds = pKehadiran.reduce((sum, h) => {
+            try {
+              const parts = h.jam.split(':');
+              const hours = parseInt(parts[0], 10) || 0;
+              const minutes = parseInt(parts[1], 10) || 0;
+              const seconds = parseInt(parts[2], 10) || 0;
+              return sum + (hours * 3600) + (minutes * 60) + seconds;
+            } catch (e) {
+              return sum;
+            }
+          }, 0);
+
+          return {
+            peserta: p,
+            count,
+            sumSeconds
+          };
+        });
+
+        // Sort by: 1. Count descending, 2. Sum of seconds ascending (earlier check-in)
+        rated.sort((a, b) => {
+          if (b.count !== a.count) {
+            return b.count - a.count;
           }
-        }, 0);
+          return a.sumSeconds - b.sumSeconds;
+        });
 
-        return {
-          peserta: p,
-          count,
-          sumSeconds
-        };
-      });
-
-      // Sort by: 1. Count descending, 2. Sum of seconds ascending (earlier check-in)
-      rated.sort((a, b) => {
-        if (b.count !== a.count) {
-          return b.count - a.count;
-        }
-        return a.sumSeconds - b.sumSeconds;
-      });
+        return rated.slice(0, 3);
+      };
 
       return {
         level,
-        top3: rated.slice(0, 3)
+        top3Putra: rateParticipants(levelPeserta.filter(p => p.jenisKelamin === 'Putra')),
+        top3Putri: rateParticipants(levelPeserta.filter(p => p.jenisKelamin === 'Putri'))
       };
     });
   }, [peserta, kehadiran]);
+
+  // Top 3 Most Active "TerAlim" Participants (Sholat Magrib & Sholat Subuh) by Level and Gender
+  const topTerAlimByLevel = useMemo(() => {
+    const levels = [
+      'Penggalang SD (SD/MI)',
+      'Penggalang SMP (SMP/MTs)',
+      'Penegak (SMA/MA/SMK)'
+    ];
+
+    // Identify activities that correspond to prayer / sholat
+    const prayerKegiatanIds = new Set(
+      kegiatan
+        .filter(k => {
+          const name = k.namaKegiatan.toLowerCase();
+          return name.includes('sholat') || name.includes('shalat') || name.includes('solat') || 
+                 name.includes('magrib') || name.includes('maghrib') || name.includes('subuh') || 
+                 name.includes('shubuh') || name.includes('ibadah');
+        })
+        .map(k => k.idKegiatan)
+    );
+
+    return levels.map(level => {
+      const levelPeserta = peserta.filter(p => p.tingkatan === level && p.statusAktif !== false);
+
+      const ratePrayerParticipants = (list: Peserta[]) => {
+        const rated = list.map(p => {
+          const pKehadiran = kehadiran.filter(h => 
+            h.idPeserta === p.idPeserta && 
+            h.statusHadir === 'Hadir' &&
+            (
+              prayerKegiatanIds.has(h.idKegiatan) ||
+              /sholat|shalat|solat|magrib|maghrib|subuh|shubuh|ibadah/i.test(h.namaKegiatan || '')
+            )
+          );
+          const count = pKehadiran.length;
+
+          // Tie-breaker: earlier check-in sum
+          const sumSeconds = pKehadiran.reduce((sum, h) => {
+            try {
+              const parts = h.jam.split(':');
+              const hours = parseInt(parts[0], 10) || 0;
+              const minutes = parseInt(parts[1], 10) || 0;
+              const seconds = parseInt(parts[2], 10) || 0;
+              return sum + (hours * 3600) + (minutes * 60) + seconds;
+            } catch (e) {
+              return sum;
+            }
+          }, 0);
+
+          return {
+            peserta: p,
+            count,
+            sumSeconds
+          };
+        });
+
+        rated.sort((a, b) => {
+          if (b.count !== a.count) {
+            return b.count - a.count;
+          }
+          return a.sumSeconds - b.sumSeconds;
+        });
+
+        return rated.slice(0, 3);
+      };
+
+      return {
+        level,
+        top3Putra: ratePrayerParticipants(levelPeserta.filter(p => p.jenisKelamin === 'Putra')),
+        top3Putri: ratePrayerParticipants(levelPeserta.filter(p => p.jenisKelamin === 'Putri'))
+      };
+    });
+  }, [peserta, kehadiran, kegiatan]);
 
 
   // --- PESERTA TAB STATE ---
@@ -1543,69 +1625,270 @@ export default function AdminPanel({
 
             {/* 3 BESAR PESERTA TERAKTIF PER TINGKATAN */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-6 border-b border-zinc-100 dark:border-zinc-850 pb-3">
-                <div className="p-2 bg-amber-500/10 text-amber-500 rounded-lg shrink-0">
-                  <Award className="w-5 h-5" />
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-6 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-500/10 text-amber-500 rounded-lg shrink-0">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">🏆 3 Besar Peserta Teraktif per Tingkatan</h3>
+                    <p className="text-[11px] text-zinc-400">Diurutkan berdasarkan jumlah kehadiran (Tie-breaker: Waktu absensi tercepat), dipisah Kategori Putra & Putri.</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">🏆 3 Besar Peserta Teraktif per Tingkatan</h3>
-                  <p className="text-[11px] text-zinc-400">Diurutkan berdasarkan jumlah kehadiran (Tie-breaker: Kumulatif waktu absensi tercepat).</p>
+
+                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setTopGenderFilter('Semua')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                      topGenderFilter === 'Semua'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    Semua Kategori
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTopGenderFilter('Putra')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                      topGenderFilter === 'Putra'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>👦 Putra</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTopGenderFilter('Putri')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                      topGenderFilter === 'Putri'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>👧 Putri</span>
+                  </button>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {topParticipantsByLevel.map((group, idx) => (
-                  <div key={idx} className="bg-zinc-50/50 dark:bg-zinc-950/40 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800/80 flex flex-col justify-between">
-                    <div>
-                      <h4 className="text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2 flex items-center justify-between">
-                        <span>{group.level.replace('Penggalang ', '')}</span>
-                      </h4>
-                      
-                      {group.top3.length > 0 && group.top3.some(item => item.count > 0) ? (
-                        <div className="space-y-2.5">
-                          {group.top3.filter(item => item.count > 0).map((item, pIdx) => {
-                            const medalBadge = pIdx === 0 
-                              ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-400/20' 
-                              : pIdx === 1 
-                              ? 'bg-slate-300 text-slate-900 ring-2 ring-slate-300/20' 
-                              : 'bg-amber-600/20 text-amber-800 dark:text-amber-400 ring-2 ring-amber-600/10';
-                            
-                            return (
-                              <div key={pIdx} className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-150/40 dark:border-zinc-800/60 shadow-xs hover:border-emerald-500 dark:hover:border-emerald-800 transition-all">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${medalBadge}`}>
-                                    {pIdx + 1}
-                                  </span>
-                                  <div className="truncate">
-                                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
-                                      {item.peserta.namaPangkalan}
-                                    </p>
-                                    <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider mt-0.5 ${
-                                      item.peserta.jenisKelamin === 'Putra' 
-                                        ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-450' 
-                                        : 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-450'
-                                    }`}>
-                                      {item.peserta.jenisKelamin}
+                {topParticipantsByLevel.map((group, idx) => {
+                  const renderSubList = (items: typeof group.top3Putra, title: string, gender: 'Putra' | 'Putri') => {
+                    const activeItems = items.filter(item => item.count > 0);
+                    const isPutra = gender === 'Putra';
+
+                    return (
+                      <div className="space-y-2">
+                        <div className={`flex items-center justify-between text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${
+                          isPutra 
+                            ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200/60 dark:border-blue-900/40' 
+                            : 'bg-rose-50/80 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/40'
+                        }`}>
+                          <span className="flex items-center gap-1">
+                            <span>{isPutra ? '👦' : '👧'}</span>
+                            <span>{title}</span>
+                          </span>
+                          <span className="text-[9px] font-bold opacity-75">{activeItems.length} Regu</span>
+                        </div>
+
+                        {activeItems.length > 0 ? (
+                          <div className="space-y-2">
+                            {activeItems.map((item, pIdx) => {
+                              const medalBadge = pIdx === 0 
+                                ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-400/20' 
+                                : pIdx === 1 
+                                ? 'bg-slate-300 text-slate-900 ring-2 ring-slate-300/20' 
+                                : 'bg-amber-600/20 text-amber-800 dark:text-amber-400 ring-2 ring-amber-600/10';
+                              
+                              return (
+                                <div key={pIdx} className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-150/40 dark:border-zinc-800/60 shadow-2xs hover:border-emerald-500 dark:hover:border-emerald-800 transition-all">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${medalBadge}`}>
+                                      {pIdx + 1}
+                                    </span>
+                                    <div className="truncate">
+                                      <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate leading-tight">
+                                        {item.peserta.namaPangkalan}
+                                      </p>
+                                      <span className="text-[9px] font-mono text-zinc-400">ID: {item.peserta.idPeserta}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0 pl-2">
+                                    <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                                      {item.count} <span className="text-[9px] font-medium text-zinc-400">Kegiatan</span>
                                     </span>
                                   </div>
                                 </div>
-                                <div className="text-right shrink-0 pl-2">
-                                  <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 font-mono">
-                                    {item.count} <span className="text-[9px] font-medium text-zinc-400">Kegiatan</span>
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="py-4 text-center bg-white dark:bg-zinc-900 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                            <p className="text-[10px] text-zinc-400 italic font-mono">Belum ada data kehadiran {gender}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <div key={idx} className="bg-zinc-50/50 dark:bg-zinc-950/40 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800/80 flex flex-col justify-between">
+                      <div>
+                        <h4 className="text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2 flex items-center justify-between">
+                          <span>{group.level.replace('Penggalang ', '')}</span>
+                        </h4>
+                        
+                        <div className="space-y-4">
+                          {(topGenderFilter === 'Semua' || topGenderFilter === 'Putra') && (
+                            renderSubList(group.top3Putra, 'Kategori Putra (Pa)', 'Putra')
+                          )}
+                          {(topGenderFilter === 'Semua' || topGenderFilter === 'Putri') && (
+                            renderSubList(group.top3Putri, 'Kategori Putri (Pi)', 'Putri')
+                          )}
                         </div>
-                      ) : (
-                        <div className="py-8 text-center bg-white dark:bg-zinc-900 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
-                          <p className="text-xs text-zinc-400 italic font-mono">Belum ada data kehadiran...</p>
-                        </div>
-                      )}
+                      </div>
                     </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 3 BESAR KATEGORI TERALIM (SHOLAT MAGRIB & SUBUH) PER TINGKATAN */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-6 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg shrink-0">
+                    <Sparkles className="w-5 h-5" />
                   </div>
-                ))}
+                  <div>
+                    <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                      <span>🕌 3 Besar Kategori TerAlim per Tingkatan</span>
+                      <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40">
+                        Sholat Magrib & Subuh
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-zinc-400">Diurutkan berdasarkan partisipasi kehadiran pada kegiatan Sholat Magrib & Subuh berjamaah, dipisah Putra & Putri.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setTopGenderFilter('Semua')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                      topGenderFilter === 'Semua'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    Semua Kategori
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTopGenderFilter('Putra')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                      topGenderFilter === 'Putra'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>👦 Putra</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTopGenderFilter('Putri')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                      topGenderFilter === 'Putri'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>👧 Putri</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {topTerAlimByLevel.map((group, idx) => {
+                  const renderPrayerSubList = (items: typeof group.top3Putra, title: string, gender: 'Putra' | 'Putri') => {
+                    const activeItems = items.filter(item => item.count > 0);
+                    const isPutra = gender === 'Putra';
+
+                    return (
+                      <div className="space-y-2">
+                        <div className={`flex items-center justify-between text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${
+                          isPutra 
+                            ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200/60 dark:border-blue-900/40' 
+                            : 'bg-rose-50/80 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/40'
+                        }`}>
+                          <span className="flex items-center gap-1">
+                            <span>{isPutra ? '👦' : '👧'}</span>
+                            <span>{title}</span>
+                          </span>
+                          <span className="text-[9px] font-bold opacity-75">{activeItems.length} Regu</span>
+                        </div>
+
+                        {activeItems.length > 0 ? (
+                          <div className="space-y-2">
+                            {activeItems.map((item, pIdx) => {
+                              const medalBadge = pIdx === 0 
+                                ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-400/20' 
+                                : pIdx === 1 
+                                ? 'bg-slate-300 text-slate-900 ring-2 ring-slate-300/20' 
+                                : 'bg-amber-600/20 text-amber-800 dark:text-amber-400 ring-2 ring-amber-600/10';
+                              
+                              return (
+                                <div key={pIdx} className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-150/40 dark:border-zinc-800/60 shadow-2xs hover:border-emerald-500 dark:hover:border-emerald-800 transition-all">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${medalBadge}`}>
+                                      {pIdx + 1}
+                                    </span>
+                                    <div className="truncate">
+                                      <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate leading-tight">
+                                        {item.peserta.namaPangkalan}
+                                      </p>
+                                      <span className="text-[9px] font-mono text-zinc-400">ID: {item.peserta.idPeserta}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0 pl-2">
+                                    <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                                      {item.count} <span className="text-[9px] font-medium text-zinc-400">Sholat</span>
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="py-4 text-center bg-white dark:bg-zinc-900 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                            <p className="text-[10px] text-zinc-400 italic font-mono">Belum ada data kehadiran Sholat {gender}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <div key={idx} className="bg-zinc-50/50 dark:bg-zinc-950/40 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800/80 flex flex-col justify-between">
+                      <div>
+                        <h4 className="text-xs font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2 flex items-center justify-between">
+                          <span>{group.level.replace('Penggalang ', '')}</span>
+                        </h4>
+                        
+                        <div className="space-y-4">
+                          {(topGenderFilter === 'Semua' || topGenderFilter === 'Putra') && (
+                            renderPrayerSubList(group.top3Putra, 'TerAlim Putra (Pa)', 'Putra')
+                          )}
+                          {(topGenderFilter === 'Semua' || topGenderFilter === 'Putri') && (
+                            renderPrayerSubList(group.top3Putri, 'TerAlim Putri (Pi)', 'Putri')
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

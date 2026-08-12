@@ -1316,6 +1316,30 @@ export const defaultKegiatan: Kegiatan[] = [
     "status": "Aktif",
     "urutan": 1,
     "tingkatan": []
+  },
+  {
+    "idKegiatan": "KGT002",
+    "namaKegiatan": "Sholat Magrib Berjamaah",
+    "hari": "Selasa",
+    "tanggal": "2026-07-21",
+    "jamMulai": "18:15",
+    "jamSelesai": "19:15",
+    "lokasi": "MUSHOLA / UTAMA",
+    "status": "Aktif",
+    "urutan": 2,
+    "tingkatan": []
+  },
+  {
+    "idKegiatan": "KGT003",
+    "namaKegiatan": "Sholat Subuh Berjamaah",
+    "hari": "Rabu",
+    "tanggal": "2026-07-22",
+    "jamMulai": "04:45",
+    "jamSelesai": "05:45",
+    "lokasi": "MUSHOLA / UTAMA",
+    "status": "Aktif",
+    "urutan": 3,
+    "tingkatan": []
   }
 ];
 
@@ -1328,7 +1352,7 @@ export const defaultKehadiran: Kehadiran[] = [
     "namaPangkalan": "SD NEGERI 68 TIBONA",
     "jenisKelamin": "Putra",
     "idKegiatan": "KGT001",
-    "namaKegiatan": "lOMBA",
+    "namaKegiatan": "Upacara Pembukaan Perkemahan Pramuka",
     "statusHadir": "Hadir",
     "petugas": "ARI"
   },
@@ -1340,7 +1364,7 @@ export const defaultKehadiran: Kehadiran[] = [
     "namaPangkalan": "SD NEGERI 63 CILALLANG",
     "jenisKelamin": "Putra",
     "idKegiatan": "KGT001",
-    "namaKegiatan": "lOMBA",
+    "namaKegiatan": "Upacara Pembukaan Perkemahan Pramuka",
     "statusHadir": "Hadir",
     "petugas": "ARI"
   },
@@ -1352,7 +1376,7 @@ export const defaultKehadiran: Kehadiran[] = [
     "namaPangkalan": "SMP 14 BULUKUMBA",
     "jenisKelamin": "Putra",
     "idKegiatan": "KGT001",
-    "namaKegiatan": "lOMBA",
+    "namaKegiatan": "Upacara Pembukaan Perkemahan Pramuka",
     "statusHadir": "Hadir",
     "petugas": "ARI"
   },
@@ -1364,7 +1388,55 @@ export const defaultKehadiran: Kehadiran[] = [
     "namaPangkalan": "MIS MALLEBBANG",
     "jenisKelamin": "Putra",
     "idKegiatan": "KGT001",
-    "namaKegiatan": "lOMBA",
+    "namaKegiatan": "Upacara Pembukaan Perkemahan Pramuka",
+    "statusHadir": "Hadir",
+    "petugas": "ARI"
+  },
+  {
+    "id": "LOG00005",
+    "tanggal": "2026-07-21",
+    "jam": "18:20",
+    "idPeserta": "68914",
+    "namaPangkalan": "SD NEGERI 68 TIBONA",
+    "jenisKelamin": "Putra",
+    "idKegiatan": "KGT002",
+    "namaKegiatan": "Sholat Magrib Berjamaah",
+    "statusHadir": "Hadir",
+    "petugas": "ARI"
+  },
+  {
+    "id": "LOG00006",
+    "tanggal": "2026-07-21",
+    "jam": "18:22",
+    "idPeserta": "01201",
+    "namaPangkalan": "SD NEGERI 1 BULUKUMBA",
+    "jenisKelamin": "Putri",
+    "idKegiatan": "KGT002",
+    "namaKegiatan": "Sholat Magrib Berjamaah",
+    "statusHadir": "Hadir",
+    "petugas": "ARI"
+  },
+  {
+    "id": "LOG00007",
+    "tanggal": "2026-07-22",
+    "jam": "04:50",
+    "idPeserta": "68914",
+    "namaPangkalan": "SD NEGERI 68 TIBONA",
+    "jenisKelamin": "Putra",
+    "idKegiatan": "KGT003",
+    "namaKegiatan": "Sholat Subuh Berjamaah",
+    "statusHadir": "Hadir",
+    "petugas": "ARI"
+  },
+  {
+    "id": "LOG00008",
+    "tanggal": "2026-07-22",
+    "jam": "04:52",
+    "idPeserta": "01201",
+    "namaPangkalan": "SD NEGERI 1 BULUKUMBA",
+    "jenisKelamin": "Putri",
+    "idKegiatan": "KGT003",
+    "namaKegiatan": "Sholat Subuh Berjamaah",
     "statusHadir": "Hadir",
     "petugas": "ARI"
   }
