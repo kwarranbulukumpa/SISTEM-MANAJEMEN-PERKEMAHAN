@@ -1236,14 +1236,16 @@ export async function generateSertifikatKontingenPDF(
   const eventOrganizer = settings?.pelaksanaEvent || "Kwartir Ranting Gerakan Pramuka Bulukumpa";
   const eventLocation = settings?.lokasiEvent || "Bumi Perkemahan Anisia";
 
+  // Standard F4 / Folio format: 210 mm x 330 mm (Landscape: 330 mm x 210 mm)
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
-    format: 'a4'
+    format: [210, 330]
   });
 
-  const w = 297;
+  const w = 330;
   const h = 210;
+  const centerX = w / 2;
 
   const resolvedTingkatan = tingkatan || getTingkatanFromSekolah(pangkalanName);
   const pesertaKategori: 'sd' | 'smp' | 'sma' | 'default' =
@@ -1328,13 +1330,13 @@ export async function generateSertifikatKontingenPDF(
 
   recipients.forEach((recipient, idx) => {
     if (idx > 0) {
-      doc.addPage('a4', 'l');
+      doc.addPage([330, 210], 'l');
     }
 
     const pageTemplateImg = templateMap[recipient.kategori] || templateMap.default;
 
     if (pageTemplateImg) {
-      // Draw user's custom JPG/PNG blank certificate template across full landscape A4
+      // Draw user's custom JPG/PNG blank certificate template across full landscape F4 (Folio 33x21 cm)
       try {
         doc.addImage(pageTemplateImg.data, 'JPEG', 0, 0, w, h);
       } catch (e) {
@@ -1353,7 +1355,7 @@ export async function generateSertifikatKontingenPDF(
       // Event Logo
       if (logoImg) {
         try {
-          doc.addImage(logoImg.data, 'JPEG', 28, 20, 24, 24);
+          doc.addImage(logoImg.data, 'JPEG', 32, 20, 24, 24);
         } catch (e) {
           console.warn("Gagal menggambar logo di sertifikat:", e);
         }
@@ -1361,81 +1363,84 @@ export async function generateSertifikatKontingenPDF(
 
       // Header Titles
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
+      doc.setFontSize(13.5);
       doc.setTextColor(15, 118, 110);
-      doc.text(eventOrganizer.toUpperCase(), 148.5, 26, { align: 'center' });
+      doc.text(eventOrganizer.toUpperCase(), centerX, 26, { align: 'center' });
 
-      doc.setFontSize(10.5);
+      doc.setFontSize(11);
       doc.setTextColor(71, 85, 105);
-      doc.text(eventName.toUpperCase(), 148.5, 33, { align: 'center' });
+      doc.text(eventName.toUpperCase(), centerX, 33, { align: 'center' });
 
-      doc.setFontSize(30);
+      doc.setFontSize(32);
       doc.setFont('times', 'bold');
       doc.setTextColor(180, 83, 9);
-      doc.text("PIAGAM PENGHARGAAN", 148.5, 54, { align: 'center' });
+      doc.text("PIAGAM PENGHARGAAN", centerX, 54, { align: 'center' });
 
-      doc.setFontSize(11.5);
+      doc.setFontSize(12);
       doc.setFont('times', 'italic');
       doc.setTextColor(100, 116, 139);
-      doc.text("Diberikan Kepada:", 148.5, 62, { align: 'center' });
+      doc.text("Diberikan Kepada:", centerX, 62, { align: 'center' });
 
       doc.setDrawColor(217, 119, 6); // Amber 600
       doc.setLineWidth(1.2);
-      doc.line(78, 84, 219, 84);
+      doc.line(centerX - 80, 84, centerX + 80, 84);
 
       doc.setFont('times', 'italic');
-      doc.setFontSize(14);
+      doc.setFontSize(14.5);
       doc.setTextColor(30, 41, 59);
-      doc.text("Sebagai", 148.5, 93, { align: 'center' });
+      doc.text("Sebagai", centerX, 93, { align: 'center' });
 
       // Appreciation Footer Sentence
       doc.setFont('helvetica', 'italic');
-      doc.setFontSize(11);
+      doc.setFontSize(11.5);
       doc.setTextColor(71, 85, 105);
       doc.text(
         `Atas partisipasi aktif, semangat, dan dedikasinya dalam menyukseskan kegiatan ${eventName}.`,
-        148.5,
+        centerX,
         130,
         { align: 'center' }
       );
 
       // Signatures at Bottom
       const sigY = 162;
+      const leftSigX = 65;
+      const rightSigX = w - 65;
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(30, 41, 59);
 
       // Left signature
-      doc.text('Mengetahui,', 55, sigY, { align: 'center' });
+      doc.text('Mengetahui,', leftSigX, sigY, { align: 'center' });
       doc.setFont('helvetica', 'bold');
-      doc.text('Ketua Kwartir Ranting', 55, sigY + 5.5, { align: 'center' });
-      doc.text(settings?.namaKetua || 'Kak Syamsuddin, S.Pd', 55, sigY + 24, { align: 'center' });
+      doc.text('Ketua Kwartir Ranting', leftSigX, sigY + 5.5, { align: 'center' });
+      doc.text(settings?.namaKetua || 'Kak Syamsuddin, S.Pd', leftSigX, sigY + 24, { align: 'center' });
       doc.setDrawColor(30, 41, 59);
       doc.setLineWidth(0.4);
-      doc.line(25, sigY + 25.5, 85, sigY + 25.5);
+      doc.line(leftSigX - 35, sigY + 25.5, leftSigX + 35, sigY + 25.5);
 
       // Right signature
       const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
       doc.setFont('helvetica', 'normal');
-      doc.text(`${eventLocation}, ${dateStr}`, w - 55, sigY, { align: 'center' });
+      doc.text(`${eventLocation}, ${dateStr}`, rightSigX, sigY, { align: 'center' });
       doc.setFont('helvetica', 'bold');
-      doc.text('Ketua Panitia Pelaksana', w - 55, sigY + 5.5, { align: 'center' });
-      doc.text(settings?.namaSekretaris || 'Kak Hendra, S.Pd', w - 55, sigY + 24, { align: 'center' });
-      doc.line(w - 85, sigY + 25.5, w - 25, sigY + 25.5);
+      doc.text('Ketua Panitia Pelaksana', rightSigX, sigY + 5.5, { align: 'center' });
+      doc.text(settings?.namaSekretaris || 'Kak Hendra, S.Pd', rightSigX, sigY + 24, { align: 'center' });
+      doc.line(rightSigX - 35, sigY + 25.5, rightSigX + 35, sigY + 25.5);
     }
 
     // --- RECIPIENT NAME (Positioned above the decorative line at Y = 75) ---
     doc.setFont('helvetica', 'bolditalic');
     const nameLen = recipient.nama.length;
     if (nameLen > 30) {
-      doc.setFontSize(20);
+      doc.setFontSize(21);
     } else if (nameLen > 22) {
-      doc.setFontSize(24);
+      doc.setFontSize(25);
     } else {
-      doc.setFontSize(28);
+      doc.setFontSize(29);
     }
     doc.setTextColor(15, 32, 67); // Dark Navy Blue
-    doc.text(recipient.nama.toUpperCase(), 148.5, 75, { align: 'center' });
+    doc.text(recipient.nama.toUpperCase(), centerX, 75, { align: 'center' });
 
     // --- RECIPIENT ROLE & PANGKALAN (Positioned below "Sebagai" at Y = 101) ---
     doc.setFont('helvetica', 'bolditalic');
@@ -1443,10 +1448,10 @@ export async function generateSertifikatKontingenPDF(
     if (roleLen > 50) {
       doc.setFontSize(14);
     } else {
-      doc.setFontSize(16);
+      doc.setFontSize(16.5);
     }
     doc.setTextColor(15, 32, 67); // Dark Navy Blue
-    doc.text(recipient.peran, 148.5, 101, { align: 'center' });
+    doc.text(recipient.peran, centerX, 101, { align: 'center' });
   });
 
   const safeName = pangkalanName.replace(/[^a-zA-Z0-9_-]/g, '_');

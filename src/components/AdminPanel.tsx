@@ -3924,10 +3924,10 @@ export default function AdminPanel({
                 <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-4 space-y-4">
                   <div>
                     <h3 className="text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">
-                      Template Sertifikat Penghargaan (URL Gambar Landscape A4)
+                      Template Sertifikat Penghargaan (URL Gambar Landscape F4 / Folio 21 x 33 cm)
                     </h3>
                     <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
-                      Anda dapat menentukan desain template sertifikat yang berbeda untuk setiap tingkatan dan untuk Pembina. Jika URL dikosongkan, sistem akan menggunakan Template Umum / Cadangan secara otomatis.
+                      Anda dapat menentukan desain template sertifikat yang berbeda untuk setiap tingkatan dan untuk Pembina berukuran standar <b>F4 (Folio) 21 cm x 33 cm Landscape</b>. Jika URL dikosongkan, sistem akan menggunakan Template Umum / Cadangan secara otomatis.
                     </p>
                   </div>
 
@@ -4101,7 +4101,7 @@ export default function AdminPanel({
                     <ol className="list-decimal list-inside space-y-1 pl-1 text-zinc-600 dark:text-zinc-400">
                       <li>Buka dasbor proyek <span className="font-semibold text-zinc-800 dark:text-zinc-200">Supabase</span> Anda, lalu pilih menu <span className="font-semibold text-zinc-800 dark:text-zinc-200">Storage</span>.</li>
                       <li>Buat bucket baru (misalnya dengan nama <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-emerald-600 dark:text-emerald-400">sertifikat</span>) dan aktifkan opsi <span className="font-semibold">Public Bucket</span> agar gambar dapat diakses secara publik.</li>
-                      <li>Upload file gambar template sertifikat kosong berorientasi <span className="font-semibold">Landscape A4 (JPG/PNG resolusi tinggi)</span> untuk masing-masing tingkatan atau pembina.</li>
+                      <li>Upload file gambar template sertifikat kosong berorientasi <span className="font-semibold">Landscape F4 / Folio (21 cm x 33 cm, JPG/PNG resolusi tinggi)</span> untuk masing-masing tingkatan atau pembina.</li>
                       <li>Klik ikon <span className="font-semibold">Get Public URL / Copy URL</span> pada file gambar yang telah diupload di Supabase Storage.</li>
                       <li>Tempel (<span className="font-semibold">Paste</span>) URL publik tersebut ke kotak input tingkatan yang sesuai di atas. Sistem akan otomatis memilih template sesuai peran & tingkatan peserta saat diunduh!</li>
                     </ol>

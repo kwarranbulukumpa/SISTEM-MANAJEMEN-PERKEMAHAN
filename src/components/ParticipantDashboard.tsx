@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, CheckCircle2, XCircle, Clock, MapPin, Award, ArrowLeft, Download, Bell, HelpCircle, Volume2, Megaphone, FileText, QrCode, History, Users, Maximize2, ExternalLink } from 'lucide-react';
+import { Calendar, CheckCircle2, XCircle, Clock, MapPin, Award, ArrowLeft, Download, Bell, HelpCircle, Volume2, Megaphone, FileText, QrCode, History, Users, Maximize2, ExternalLink, Lock, X, ShieldAlert } from 'lucide-react';
 import { Peserta, Kegiatan, Kehadiran, AppSettings, Pengumuman, PangkalanDetail, AnggotaPramuka, DokumenKegiatan, formatIndonesianDate, formatIndonesianTime, getTingkatanFromSekolah } from '../types';
 import { speakIndonesianText } from '../lib/tts';
 import { generateKartuAbsenPDF, generateBulkIdCardsPDF, generateSertifikatKontingenPDF } from '../lib/pdf';
@@ -184,6 +184,12 @@ export default function ParticipantDashboard({
     tanggalLahir: ''
   });
 
+  const [isLockedModalOpen, setIsLockedModalOpen] = useState(false);
+
+  const showLockedNotice = () => {
+    setIsLockedModalOpen(true);
+  };
+
   useEffect(() => {
     setPembinaForm({
       namaPembina: myDetail.namaPembina,
@@ -193,70 +199,16 @@ export default function ParticipantDashboard({
 
   const handleSavePembina = (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedDetails = [...pangkalanDetails];
-    const index = updatedDetails.findIndex(d => d.idPeserta === currentPeserta.idPeserta);
-    if (index >= 0) {
-      updatedDetails[index] = {
-        ...updatedDetails[index],
-        namaPembina: pembinaForm.namaPembina,
-        hpPembina: pembinaForm.hpPembina
-      };
-    } else {
-      updatedDetails.push({
-        idPeserta: currentPeserta.idPeserta,
-        namaPembina: pembinaForm.namaPembina,
-        hpPembina: pembinaForm.hpPembina,
-        anggota: []
-      });
-    }
-    onUpdatePangkalanDetails(updatedDetails);
-    alert("Data Pembina berhasil disimpan!");
+    showLockedNotice();
   };
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMember.nama.trim()) {
-      alert("Harap masukkan nama lengkap anggota!");
-      return;
-    }
-    const updatedDetails = [...pangkalanDetails];
-    const index = updatedDetails.findIndex(d => d.idPeserta === currentPeserta.idPeserta);
-    const newAnggota: AnggotaPramuka = {
-      id: `ANG-${Date.now()}`,
-      nama: newMember.nama,
-      tempatLahir: '',
-      tanggalLahir: ''
-    };
-    
-    if (index >= 0) {
-      updatedDetails[index] = {
-        ...updatedDetails[index],
-        anggota: [...updatedDetails[index].anggota, newAnggota]
-      };
-    } else {
-      updatedDetails.push({
-        idPeserta: currentPeserta.idPeserta,
-        namaPembina: pembinaForm.namaPembina,
-        hpPembina: pembinaForm.hpPembina,
-        anggota: [newAnggota]
-      });
-    }
-    onUpdatePangkalanDetails(updatedDetails);
-    setNewMember({ nama: '', tempatLahir: '', tanggalLahir: '' });
+    showLockedNotice();
   };
 
-  const handleDeleteMember = (memberId: string) => {
-    if (confirm("Apakah Anda yakin ingin menghapus anggota ini?")) {
-      const updatedDetails = [...pangkalanDetails];
-      const index = updatedDetails.findIndex(d => d.idPeserta === currentPeserta.idPeserta);
-      if (index >= 0) {
-        updatedDetails[index] = {
-          ...updatedDetails[index],
-          anggota: updatedDetails[index].anggota.filter(m => m.id !== memberId)
-        };
-        onUpdatePangkalanDetails(updatedDetails);
-      }
-    }
+  const handleDeleteMember = (_memberId?: string) => {
+    showLockedNotice();
   };
 
 
@@ -782,6 +734,35 @@ export default function ParticipantDashboard({
       {activeTab === 'pangkalan_admin' && (
         <div className="space-y-6" id="tab-pangkalan-admin-content">
 
+          {/* NOTICE BANNER: PENGUNCIAN DATA PERKEMAHAN */}
+          <div className="bg-amber-500/10 dark:bg-amber-950/30 border border-amber-400/40 dark:border-amber-700/50 rounded-2xl p-4.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-amber-950 dark:text-amber-200 shadow-sm" id="banner-pangkalan-locked-notice">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl shrink-0 mt-0.5">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-300 flex items-center gap-1.5 flex-wrap">
+                  <span>🔒 Penguncian Data Peserta & Pembina</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/70 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300/60 dark:border-amber-800">
+                    Perkemahan Telah Selesai
+                  </span>
+                </h4>
+                <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed font-medium">
+                  Perkemahan telah selesai, anda tidak diperkenankan lagi mengedit data peserta perkemahan, silahkan download sertifikat yang telah diberi tanda tangan dan stempel.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handlePrintSertifikat}
+              disabled={isPrintingSertifikat}
+              className="w-full md:w-auto shrink-0 bg-emerald-700 hover:bg-emerald-800 disabled:bg-emerald-700/50 text-white text-xs font-black py-2.5 px-5 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
+            >
+              <Award className="w-4 h-4 text-white" />
+              <span>Download Sertifikat</span>
+            </button>
+          </div>
 
           {/* CARD: PRINT ID CARDS SECTION */}
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-150 dark:border-zinc-800 p-5 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
@@ -823,9 +804,9 @@ export default function ParticipantDashboard({
                 <Award className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-tight">Cetak Sertifikat Kontingen (Format A4 Landscape)</h4>
+                <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-tight">Cetak Sertifikat Kontingen (Format F4 / Folio 21 cm x 33 cm)</h4>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-xl">
-                  Cetak piagam/sertifikat resmi secara otomatis untuk <b>Pembina Pendamping</b> dan <b>seluruh Anggota Pramuka</b> dari Pangkalan Anda. Setiap halaman PDF akan otomatis menyesuaikan nama dan perannya (misal: <i>Sebagai Pembina Pangkalan SDN 334 Binuang</i> atau <i>Sebagai Peserta Perkemahan dari Pangkalan SDN 334 Binuang</i>).
+                  Cetak piagam/sertifikat resmi secara otomatis untuk <b>Pembina Pendamping</b> dan <b>seluruh Anggota Pramuka</b> dari Pangkalan Anda dengan standar kertas <b>F4 / Folio (21 x 33 cm Landscape)</b>. Setiap halaman PDF otomatis menyesuaikan nama dan perannya.
                 </p>
               </div>
             </div>
@@ -853,79 +834,113 @@ export default function ParticipantDashboard({
             {/* LEFT COLUMN: FORMS (5 COLS) */}
             <div className="lg:col-span-5 space-y-6">
               
-              {/* FORM: BIODATA PEMBINA */}
-              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-150 dark:border-zinc-800 p-5 shadow-sm">
-                <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-4 flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                  <User className="w-4 h-4 text-emerald-600" />
-                  Identitas Pembina Pendamping
-                </h4>
+              {/* FORM: BIODATA PEMBINA (TERKUNCI) */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-150 dark:border-zinc-800 p-5 shadow-sm relative overflow-hidden">
+                <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2 mb-4">
+                  <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-emerald-600" />
+                    Identitas Pembina Pendamping
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/40 flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> Terkunci
+                  </span>
+                </div>
 
                 <form onSubmit={handleSavePembina} className="space-y-3">
                   <div>
-                    <label className="block text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase mb-1">Nama Pembina</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: Kak Wahyu Hidayat, S.Pd."
-                      value={pembinaForm.namaPembina}
-                      onChange={(e) => setPembinaForm(p => ({ ...p, namaPembina: e.target.value }))}
-                      className="w-full text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-750 rounded-xl p-3 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase">Nama Pembina</label>
+                      <span className="text-[9px] text-amber-600 dark:text-amber-400 font-mono">Terkunci</span>
+                    </div>
+                    <div className="relative cursor-not-allowed" onClick={showLockedNotice}>
+                      <input
+                        type="text"
+                        readOnly
+                        placeholder="Contoh: Kak Wahyu Hidayat, S.Pd."
+                        value={pembinaForm.namaPembina}
+                        onClick={showLockedNotice}
+                        className="w-full text-xs bg-zinc-100/80 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-750 rounded-xl p-3 text-zinc-600 dark:text-zinc-300 cursor-not-allowed focus:outline-none"
+                      />
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-zinc-400">
+                        <Lock className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase mb-1">Nomor HP / WhatsApp</label>
-                    <div className="relative">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase">Nomor HP / WhatsApp</label>
+                      <span className="text-[9px] text-amber-600 dark:text-amber-400 font-mono">Terkunci</span>
+                    </div>
+                    <div className="relative cursor-not-allowed" onClick={showLockedNotice}>
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400 dark:text-zinc-500">
                         <Smartphone className="w-3.5 h-3.5" />
                       </div>
                       <input
                         type="tel"
-                        required
+                        readOnly
                         placeholder="Contoh: 081234567890"
                         value={pembinaForm.hpPembina}
-                        onChange={(e) => setPembinaForm(p => ({ ...p, hpPembina: e.target.value }))}
-                        className="w-full text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-750 rounded-xl pl-9 pr-3 py-3 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        onClick={showLockedNotice}
+                        className="w-full text-xs bg-zinc-100/80 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-750 rounded-xl pl-9 pr-8 py-3 text-zinc-600 dark:text-zinc-300 cursor-not-allowed focus:outline-none"
                       />
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-zinc-400">
+                        <Lock className="w-3.5 h-3.5" />
+                      </div>
                     </div>
                   </div>
 
                   <button
-                    type="submit"
-                    className="w-full bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                    type="button"
+                    onClick={showLockedNotice}
+                    className="w-full bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors border border-zinc-300 dark:border-zinc-700 shadow-2xs"
                   >
-                    <Save className="w-3.5 h-3.5" />
-                    Simpan Data Pembina
+                    <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    Simpan Data Pembina (Terkunci)
                   </button>
                 </form>
               </div>
 
-              {/* FORM: INPUT ANGGOTA BARU */}
-              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-150 dark:border-zinc-800 p-5 shadow-sm">
-                <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-4 flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                  <Plus className="w-4 h-4 text-emerald-600" />
-                  Tambah Anggota Pramuka (Peserta)
-                </h4>
+              {/* FORM: INPUT ANGGOTA BARU (TERKUNCI) */}
+              <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-150 dark:border-zinc-800 p-5 shadow-sm relative overflow-hidden">
+                <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2 mb-4">
+                  <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <Plus className="w-4 h-4 text-emerald-600" />
+                    Tambah Anggota Pramuka (Peserta)
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300/40 flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> Terkunci
+                  </span>
+                </div>
 
                 <form onSubmit={handleAddMember} className="space-y-3">
                   <div>
-                    <label className="block text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase mb-1">Nama Lengkap Anggota</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Nama Lengkap"
-                      value={newMember.nama}
-                      onChange={(e) => setNewMember(p => ({ ...p, nama: e.target.value }))}
-                      className="w-full text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-750 rounded-xl p-3 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-mono font-bold text-zinc-400 dark:text-zinc-500 uppercase">Nama Lengkap Anggota</label>
+                      <span className="text-[9px] text-amber-600 dark:text-amber-400 font-mono">Terkunci</span>
+                    </div>
+                    <div className="relative cursor-not-allowed" onClick={showLockedNotice}>
+                      <input
+                        type="text"
+                        readOnly
+                        placeholder="Nama Lengkap (Terkunci)"
+                        value=""
+                        onClick={showLockedNotice}
+                        className="w-full text-xs bg-zinc-100/80 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-750 rounded-xl p-3 text-zinc-400 cursor-not-allowed focus:outline-none"
+                      />
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-zinc-400">
+                        <Lock className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
                   </div>
 
                   <button
-                    type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                    type="button"
+                    onClick={showLockedNotice}
+                    className="w-full bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors border border-zinc-300 dark:border-zinc-700 shadow-2xs"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    Tambah Anggota Ke Regu
+                    <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    Tambah Anggota Ke Regu (Terkunci)
                   </button>
                 </form>
               </div>
@@ -978,7 +993,7 @@ export default function ParticipantDashboard({
                           <tr className="border-b border-zinc-150 dark:border-zinc-800 text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
                             <th className="py-2.5 pl-2">No</th>
                             <th className="py-2.5">Nama Anggota</th>
-                            <th className="py-2.5 pr-2 text-right">Aksi</th>
+                            <th className="py-2.5 pr-2 text-right">Status Data</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 text-xs">
@@ -988,11 +1003,13 @@ export default function ParticipantDashboard({
                               <td className="py-3 font-semibold text-zinc-850 dark:text-zinc-100 group-hover:text-zinc-950 dark:group-hover:text-white">{ang.nama}</td>
                               <td className="py-3 pr-2 text-right">
                                 <button
-                                  onClick={() => handleDeleteMember(ang.id)}
-                                  className="p-1.5 text-rose-500 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors"
-                                  title="Hapus Anggota"
+                                  type="button"
+                                  onClick={showLockedNotice}
+                                  className="inline-flex items-center gap-1 py-1 px-2.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 rounded-lg border border-amber-200 dark:border-amber-800 transition-colors"
+                                  title="Data Terkunci"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Lock className="w-3 h-3" />
+                                  <span>Terkunci</span>
                                 </button>
                               </td>
                             </tr>
@@ -1017,11 +1034,13 @@ export default function ParticipantDashboard({
                           </div>
                           
                           <button
-                            onClick={() => handleDeleteMember(ang.id)}
-                            className="p-2.5 text-rose-600 hover:text-rose-400 bg-rose-50 dark:bg-rose-950/20 rounded-xl border border-rose-100/60 dark:border-rose-950/40 transition-colors shrink-0"
-                            title="Hapus Anggota"
+                            type="button"
+                            onClick={showLockedNotice}
+                            className="p-2 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200/60 dark:border-amber-900/40 transition-colors shrink-0 flex items-center gap-1 text-[10px] font-bold"
+                            title="Data Terkunci"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Terkunci</span>
                           </button>
                         </div>
                       ))}
@@ -1031,13 +1050,11 @@ export default function ParticipantDashboard({
                   <div className="text-center py-16 text-zinc-400 dark:text-zinc-500 space-y-2">
                     <p className="italic text-xs font-mono">Belum ada anggota yang didaftarkan untuk pangkalan ini.</p>
                     <p className="text-[11px] max-w-sm mx-auto">
-                      Silakan gunakan form di sebelah kiri untuk menginput nama-nama peserta pramuka yang ikut serta dalam perkemahan ini.
+                      Data peserta pangkalan telah dikunci karena perkemahan telah selesai.
                     </p>
                   </div>
                 )}
               </div>
-
-
 
             </div>
           </div>
@@ -1151,6 +1168,64 @@ export default function ParticipantDashboard({
             >
               Tutup / Kembali
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL: DATA PERKEMAHAN SELESAI / DATA TERKUNCI */}
+      {isLockedModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in" id="modal-participant-locked-notice">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 max-w-md w-full border border-amber-300 dark:border-amber-700/60 shadow-2xl text-center space-y-5 relative">
+            <button
+              type="button"
+              onClick={() => setIsLockedModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              title="Tutup"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto ring-8 ring-amber-500/5">
+              <Lock className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[10px] font-mono tracking-widest text-amber-700 dark:text-amber-400 font-black uppercase">
+                PEMBERITAHUAN RESMI
+              </span>
+              <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight">
+                Akses Pengeditan Data Terkunci
+              </h3>
+            </div>
+
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 rounded-2xl text-left">
+              <p className="text-xs text-amber-950 dark:text-amber-200 font-semibold leading-relaxed text-center">
+                &ldquo;Perkemahan telah selesai, anda tidak diperkenankan lagi mengedit data peserta perkemahan, silahkan download sertifikat yang telah diberi tanda tangan dan stempel &rdquo;
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLockedModalOpen(false);
+                  handlePrintSertifikat();
+                }}
+                disabled={isPrintingSertifikat}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-emerald-700/50 text-white text-xs font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-95"
+              >
+                <Award className="w-4 h-4 text-white" />
+                <span>Download / Cetak Sertifikat Sekarang</span>
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setIsLockedModalOpen(false)}
+                className="w-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold py-2.5 px-4 rounded-xl transition-colors"
+              >
+                Tutup Pemberitahuan
+              </button>
+            </div>
           </div>
         </div>
       )}
