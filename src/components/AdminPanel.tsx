@@ -9,14 +9,14 @@ import {
   Plus, Edit2, Trash2, Search, Filter, Download, Upload, Printer, AlertTriangle,
   UserPlus, Shield, Activity, RefreshCw, Eye, Check, AlertCircle, FileText, Megaphone, Volume2, X,
   Home, School, UserCheck, ExternalLink, Award, QrCode, Database, Cloud, Play, CheckCircle,
-  Sparkles, Heart, Star
+  Sparkles, Heart, Star, Phone, UserMinus, ListPlus, Save, CheckCircle2, Loader2
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Peserta, Kegiatan, Kehadiran, Admin, AuditLog, AppSettings, Pengumuman, PangkalanDetail, DokumenKegiatan, formatIndonesianDate, formatIndonesianTime, getTingkatanFromSekolah } from '../types';
+import { Peserta, Kegiatan, Kehadiran, Admin, AuditLog, AppSettings, Pengumuman, PangkalanDetail, AnggotaPramuka, DokumenKegiatan, formatIndonesianDate, formatIndonesianTime, getTingkatanFromSekolah } from '../types';
 import ScannerComponent from './ScannerComponent';
 import SupabaseSyncPanel from './SupabaseSyncPanel';
 import { speakIndonesianText } from '../lib/tts';
-import { generateKartuAbsenPDF, generateLaporanPDF, generateJadwalKegiatanPDF, generateDataPangkalanPDF } from '../lib/pdf';
+import { generateKartuAbsenPDF, generateLaporanPDF, generateJadwalKegiatanPDF, generateDataPangkalanPDF, generateBulkIdCardsPDF, generateSertifikatKontingenPDF } from '../lib/pdf';
 
 interface AdminPanelProps {
   currentAdmin: Admin;
@@ -577,16 +577,49 @@ export default function AdminPanel({
   const [selectedPesertaForQr, setSelectedPesertaForQr] = useState<Peserta | null>(null);
   const [viewingPangkalan, setViewingPangkalan] = useState<Peserta | null>(null);
   const [isPesertaModalOpen, setIsPesertaModalOpen] = useState(false);
-  const [pesertaForm, setPesertaForm] = useState<Partial<Peserta>>({
+  const [pesertaForm, setPesertaForm] = useState<Partial<Peserta> & { namaPembina?: string; hpPembina?: string }>({
     idPeserta: '',
     namaPangkalan: '',
     jenisKelamin: 'Putra',
     statusAktif: true,
-    tingkatan: 'Penggalang SD (SD/MI)'
+    tingkatan: 'Penggalang SD (SD/MI)',
+    namaPembina: '',
+    hpPembina: ''
   });
   const [pesertaFormMode, setPesertaFormMode] = useState<'tambah' | 'edit'>('tambah');
   const [csvText, setCsvText] = useState('');
   const [isImportOpen, setIsImportOpen] = useState(false);
+
+  // --- STATE KELOLA PEMBINA & ANGGOTA DALAM MODAL ---
+  const [viewingPangkalanPembina, setViewingPangkalanPembina] = useState<{ namaPembina: string; hpPembina: string }>({
+    namaPembina: '',
+    hpPembina: ''
+  });
+  const [viewingPangkalanNewAnggota, setViewingPangkalanNewAnggota] = useState('');
+  const [viewingPangkalanBulkAnggota, setViewingPangkalanBulkAnggota] = useState('');
+  const [isBulkAddOpen, setIsBulkAddOpen] = useState(false);
+  const [editingAnggotaId, setEditingAnggotaId] = useState<string | null>(null);
+  const [editingAnggotaName, setEditingAnggotaName] = useState('');
+  const [pembinaSavedSuccess, setPembinaSavedSuccess] = useState(false);
+  const [isGeneratingIdCard, setIsGeneratingIdCard] = useState(false);
+  const [isGeneratingSertifikat, setIsGeneratingSertifikat] = useState(false);
+
+  // Sync state ketika viewingPangkalan dibuka atau berubah
+  useEffect(() => {
+    if (viewingPangkalan) {
+      const detail = pangkalanDetails?.find(d => d.idPeserta === viewingPangkalan.idPeserta);
+      setViewingPangkalanPembina({
+        namaPembina: detail?.namaPembina || '',
+        hpPembina: detail?.hpPembina || ''
+      });
+      setViewingPangkalanNewAnggota('');
+      setViewingPangkalanBulkAnggota('');
+      setIsBulkAddOpen(false);
+      setEditingAnggotaId(null);
+      setEditingAnggotaName('');
+      setPembinaSavedSuccess(false);
+    }
+  }, [viewingPangkalan]);
 
   const filteredPeserta = useMemo(() => {
     const filtered = peserta.filter(p => {
@@ -648,11 +681,16 @@ export default function AdminPanel({
     });
   }, [peserta, searchPeserta, filterJk, filterTingkatan, filterStatus]);
 
-  // --- CRUD PESERTA ---
+  // --- CRUD PESERTA & PANGKALAN ---
   const handleOpenPesertaModal = (mode: 'tambah' | 'edit', data?: Peserta) => {
     setPesertaFormMode(mode);
     if (mode === 'edit' && data) {
-      setPesertaForm(data);
+      const detail = pangkalanDetails?.find(d => d.idPeserta === data.idPeserta);
+      setPesertaForm({
+        ...data,
+        namaPembina: detail?.namaPembina || '',
+        hpPembina: detail?.hpPembina || ''
+      });
     } else {
       // Auto-generate ID based on count
       const maxPesertaNum = peserta.reduce((max, p) => {
@@ -665,7 +703,9 @@ export default function AdminPanel({
         namaPangkalan: '',
         jenisKelamin: 'Putra',
         statusAktif: true,
-        tingkatan: 'Penggalang SD (SD/MI)'
+        tingkatan: 'Penggalang SD (SD/MI)',
+        namaPembina: '',
+        hpPembina: ''
       });
     }
     setIsPesertaModalOpen(true);
@@ -691,20 +731,238 @@ export default function AdminPanel({
         tingkatan: pesertaForm.tingkatan || 'Penggalang SD (SD/MI)'
       };
       onUpdatePeserta([...peserta, newPeserta]);
+
+      // Update or create initial pangkalan detail if Pembina was provided
+      if (pesertaForm.namaPembina?.trim() || pesertaForm.hpPembina?.trim()) {
+        onUpdatePangkalanDetails(prev => {
+          const exists = prev.some(d => d.idPeserta === newPeserta.idPeserta);
+          if (exists) {
+            return prev.map(d => d.idPeserta === newPeserta.idPeserta ? {
+              ...d,
+              namaPembina: (pesertaForm.namaPembina || '').trim(),
+              hpPembina: (pesertaForm.hpPembina || '').trim()
+            } : d);
+          }
+          return [...prev, {
+            idPeserta: newPeserta.idPeserta,
+            namaPembina: (pesertaForm.namaPembina || '').trim(),
+            hpPembina: (pesertaForm.hpPembina || '').trim(),
+            anggota: []
+          }];
+        });
+      }
+
       onAddAuditLog("Tambah Peserta", `Menambahkan peserta baru ${newPeserta.idPeserta} - ${newPeserta.namaPangkalan}`);
     } else {
       const updated = peserta.map(p => p.idPeserta === pesertaForm.idPeserta ? { ...p, ...pesertaForm } as Peserta : p);
       onUpdatePeserta(updated);
+
+      // Update Pembina data in pangkalanDetails if edited here
+      if (pesertaForm.namaPembina !== undefined || pesertaForm.hpPembina !== undefined) {
+        onUpdatePangkalanDetails(prev => {
+          const exists = prev.some(d => d.idPeserta === pesertaForm.idPeserta);
+          if (exists) {
+            return prev.map(d => d.idPeserta === pesertaForm.idPeserta ? {
+              ...d,
+              namaPembina: (pesertaForm.namaPembina || '').trim(),
+              hpPembina: (pesertaForm.hpPembina || '').trim()
+            } : d);
+          }
+          return [...prev, {
+            idPeserta: pesertaForm.idPeserta!,
+            namaPembina: (pesertaForm.namaPembina || '').trim(),
+            hpPembina: (pesertaForm.hpPembina || '').trim(),
+            anggota: []
+          }];
+        });
+      }
+
       onAddAuditLog("Edit Peserta", `Mengubah biodata peserta ${pesertaForm.idPeserta}`);
     }
     setIsPesertaModalOpen(false);
   };
 
   const handleDeletePeserta = (id: string) => {
-    if (confirm(`Apakah Anda yakin ingin menghapus peserta dengan ID ${id}?`)) {
+    if (confirm(`Apakah Anda yakin ingin menghapus peserta dengan ID ${id}? Data pembina dan anggota pangkalan ini juga akan dihapus.`)) {
       const updated = peserta.filter(p => p.idPeserta !== id);
       onUpdatePeserta(updated);
-      onAddAuditLog("Hapus Peserta", `Menghapus peserta dengan ID ${id}`);
+      onUpdatePangkalanDetails(prev => prev.filter(pd => pd.idPeserta !== id));
+      onAddAuditLog("Hapus Peserta", `Menghapus peserta dan pangkalan ID ${id}`);
+    }
+  };
+
+  // --- ADMIN KELOLA DATA PEMBINA & ANGGOTA PANGKALAN ---
+  const handleAdminSavePembina = (idPeserta: string, namaPembina: string, hpPembina: string) => {
+    onUpdatePangkalanDetails(prev => {
+      const exists = prev.some(d => d.idPeserta === idPeserta);
+      if (exists) {
+        return prev.map(d => d.idPeserta === idPeserta ? {
+          ...d,
+          namaPembina: namaPembina.trim(),
+          hpPembina: hpPembina.trim()
+        } : d);
+      }
+      return [...prev, {
+        idPeserta,
+        namaPembina: namaPembina.trim(),
+        hpPembina: hpPembina.trim(),
+        anggota: []
+      }];
+    });
+
+    setPembinaSavedSuccess(true);
+    setTimeout(() => setPembinaSavedSuccess(false), 3000);
+    onAddAuditLog("Simpan Pembina (Admin)", `Admin memperbarui data pembina pangkalan ${idPeserta}: "${namaPembina.trim()}" (HP: ${hpPembina.trim() || '-'})`);
+  };
+
+  const handleAdminAddAnggota = (idPeserta: string, namaAnggota: string) => {
+    if (!namaAnggota.trim()) return;
+
+    onUpdatePangkalanDetails(prev => {
+      const existing = prev.find(d => d.idPeserta === idPeserta);
+      const curAnggota = existing?.anggota || [];
+      const nextNum = curAnggota.length + 1;
+      const newId = `${idPeserta}-A${String(nextNum).padStart(2, '0')}`;
+      const newMember: AnggotaPramuka = {
+        id: newId,
+        nama: namaAnggota.trim(),
+        tempatLahir: '',
+        tanggalLahir: ''
+      };
+      const updatedAnggota = [...curAnggota, newMember];
+
+      if (existing) {
+        return prev.map(d => d.idPeserta === idPeserta ? { ...d, anggota: updatedAnggota } : d);
+      }
+      return [...prev, {
+        idPeserta,
+        namaPembina: '',
+        hpPembina: '',
+        anggota: updatedAnggota
+      }];
+    });
+
+    setViewingPangkalanNewAnggota('');
+    onAddAuditLog("Tambah Anggota (Admin)", `Admin menambahkan anggota "${namaAnggota.trim()}" pada pangkalan ${idPeserta}`);
+  };
+
+  const handleAdminBulkAddAnggota = (idPeserta: string, rawText: string) => {
+    const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return;
+
+    onUpdatePangkalanDetails(prev => {
+      const existing = prev.find(d => d.idPeserta === idPeserta);
+      const curAnggota = existing?.anggota || [];
+      let counter = curAnggota.length;
+      
+      const newMembers: AnggotaPramuka[] = lines.map(name => {
+        counter++;
+        return {
+          id: `${idPeserta}-A${String(counter).padStart(2, '0')}`,
+          nama: name,
+          tempatLahir: '',
+          tanggalLahir: ''
+        };
+      });
+
+      const updatedAnggota = [...curAnggota, ...newMembers];
+
+      if (existing) {
+        return prev.map(d => d.idPeserta === idPeserta ? { ...d, anggota: updatedAnggota } : d);
+      }
+      return [...prev, {
+        idPeserta,
+        namaPembina: '',
+        hpPembina: '',
+        anggota: updatedAnggota
+      }];
+    });
+
+    setViewingPangkalanBulkAnggota('');
+    setIsBulkAddOpen(false);
+    onAddAuditLog("Tambah Banyak Anggota (Admin)", `Admin menambahkan ${lines.length} nama anggota sekaligus pada pangkalan ${idPeserta}`);
+  };
+
+  const handleAdminEditAnggota = (idPeserta: string, memberId: string, newName: string) => {
+    if (!newName.trim()) return;
+
+    onUpdatePangkalanDetails(prev => {
+      return prev.map(d => {
+        if (d.idPeserta !== idPeserta) return d;
+        return {
+          ...d,
+          anggota: (d.anggota || []).map(a => a.id === memberId ? { ...a, nama: newName.trim() } : a)
+        };
+      });
+    });
+
+    setEditingAnggotaId(null);
+    setEditingAnggotaName('');
+    onAddAuditLog("Edit Anggota (Admin)", `Admin mengubah nama anggota (${memberId}) menjadi "${newName.trim()}" pada pangkalan ${idPeserta}`);
+  };
+
+  const handleAdminDeleteAnggota = (idPeserta: string, memberId: string, memberName: string) => {
+    if (!confirm(`Hapus anggota "${memberName}" (${memberId}) dari pangkalan ini?`)) return;
+
+    onUpdatePangkalanDetails(prev => {
+      return prev.map(d => {
+        if (d.idPeserta !== idPeserta) return d;
+        return {
+          ...d,
+          anggota: (d.anggota || []).filter(a => a.id !== memberId)
+        };
+      });
+    });
+
+    onAddAuditLog("Hapus Anggota (Admin)", `Admin menghapus anggota "${memberName}" (${memberId}) dari pangkalan ${idPeserta}`);
+  };
+
+  const handleDownloadIdCardKontingen = async (p: Peserta) => {
+    setIsGeneratingIdCard(true);
+    try {
+      const detail = pangkalanDetails?.find(d => d.idPeserta === p.idPeserta);
+      const pembinaData = detail?.namaPembina ? { nama: detail.namaPembina, hp: detail.hpPembina || '' } : null;
+      const anggotaList = detail?.anggota || [];
+
+      await generateBulkIdCardsPDF(
+        p.namaPangkalan,
+        p.idPeserta,
+        pembinaData,
+        anggotaList,
+        p.jenisKelamin,
+        settings,
+        p.tingkatan
+      );
+      onAddAuditLog("Cetak ID Card Kontingen (Admin)", `Admin mencetak ID Card kontingen ${p.namaPangkalan} (${p.idPeserta})`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Gagal membuat PDF ID Card Kontingen: " + (err?.message || "Terjadi kesalahan"));
+    } finally {
+      setIsGeneratingIdCard(false);
+    }
+  };
+
+  const handleDownloadSertifikatKontingen = async (p: Peserta) => {
+    setIsGeneratingSertifikat(true);
+    try {
+      const detail = pangkalanDetails?.find(d => d.idPeserta === p.idPeserta);
+      const pembinaData = detail?.namaPembina ? { nama: detail.namaPembina, hp: detail.hpPembina || '' } : null;
+      const anggotaList = detail?.anggota || [];
+
+      await generateSertifikatKontingenPDF(
+        p.namaPangkalan,
+        pembinaData,
+        anggotaList,
+        settings,
+        p.namaPangkalan,
+        p.tingkatan
+      );
+      onAddAuditLog("Cetak Sertifikat Kontingen (Admin)", `Admin mencetak sertifikat F4 kontingen ${p.namaPangkalan} (${p.idPeserta})`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Gagal membuat PDF Sertifikat: " + (err?.message || "Terjadi kesalahan"));
+    } finally {
+      setIsGeneratingSertifikat(false);
     }
   };
 
@@ -2080,11 +2338,33 @@ export default function AdminPanel({
                           p.jenisKelamin === 'Putra' ? 'border-l-blue-500' : 'border-l-rose-500'
                         }`}>
                           <td className="p-3 font-bold font-mono text-emerald-800 dark:text-emerald-500">{p.idPeserta}</td>
-                          <td className="p-3 font-semibold flex items-center gap-2">
-                            <span className={`text-base ${p.jenisKelamin === 'Putra' ? 'text-blue-500' : 'text-rose-500'}`}>
-                              {p.jenisKelamin === 'Putra' ? '👦' : '👧'}
-                            </span>
-                            <span>{p.namaPangkalan}</span>
+                          <td className="p-3 font-semibold">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-base ${p.jenisKelamin === 'Putra' ? 'text-blue-500' : 'text-rose-500'}`}>
+                                {p.jenisKelamin === 'Putra' ? '👦' : '👧'}
+                              </span>
+                              <div>
+                                <div className="text-zinc-900 dark:text-zinc-100 font-bold">{p.namaPangkalan}</div>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                    hasPembina
+                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                                  }`}>
+                                    <Shield className="w-2.5 h-2.5" />
+                                    {hasPembina ? detail!.namaPembina : 'Pembina: Belum diisi'}
+                                  </span>
+                                  <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                                    validAnggotaCount > 0
+                                      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300'
+                                      : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                                  }`}>
+                                    <Users className="w-2.5 h-2.5" />
+                                    {validAnggotaCount} Anggota
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
                           </td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
@@ -2109,21 +2389,18 @@ export default function AdminPanel({
                             <span className={`inline-block w-2.5 h-2.5 rounded-full ${p.statusAktif ? 'bg-emerald-500' : 'bg-zinc-300'}`}></span>
                           </td>
                           <td className="p-3">
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => setViewingPangkalan(p)}
-                                className={`p-1.5 rounded transition-all ${
+                                className={`px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1 font-bold transition-all ${
                                   isCompletePangkalan
-                                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-sm font-bold'
-                                    : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400'
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm'
                                 }`}
-                                title={
-                                  isCompletePangkalan
-                                    ? `Lihat Data Pangkalan (Lengkap: Pembina & ${validAnggotaCount} Anggota)`
-                                    : 'Lihat Data Pangkalan (Pembina & Anggota)'
-                                }
+                                title="Kelola Data Pembina & Daftar Anggota Peserta"
                               >
-                                <Eye className="w-3.5 h-3.5" />
+                                <Users className="w-3.5 h-3.5" />
+                                <span className="hidden xl:inline">Kelola Peserta</span>
                               </button>
                             <button
                               onClick={() => setSelectedPesertaForQr(p)}
@@ -2142,7 +2419,7 @@ export default function AdminPanel({
                             <button
                               onClick={() => handleOpenPesertaModal('edit', p)}
                               className="p-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300"
-                              title="Edit"
+                              title="Edit Sekolah / Pangkalan"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -2278,124 +2555,347 @@ export default function AdminPanel({
               </>
             )}
 
-            {/* VIEW DETAILS OF PANGKALAN OVERLAY MODAL */}
+            {/* KELOLA PEMBINA & ANGGOTA PANGKALAN OVERLAY MODAL */}
             {viewingPangkalan && (() => {
               const detail = pangkalanDetails ? pangkalanDetails.find(d => d.idPeserta === viewingPangkalan.idPeserta) : null;
+              const anggotaList = detail?.anggota || [];
+
               return (
                 <>
-                  <div onClick={() => setViewingPangkalan(null)} className="fixed inset-0 z-40 bg-black/65 backdrop-blur-sm animate-fade-in animate-duration-150" />
-                  <div className="fixed inset-x-4 top-[8%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-3xl z-50 max-h-[84vh] overflow-y-auto bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-150 dark:border-zinc-800 shadow-2xl flex flex-col gap-5 animate-scale-up">
+                  <div onClick={() => setViewingPangkalan(null)} className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm animate-fade-in animate-duration-150" />
+                  <div className="fixed inset-x-4 top-[5%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-4xl z-50 max-h-[90vh] overflow-y-auto bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-150 dark:border-zinc-800 shadow-2xl flex flex-col gap-6 animate-scale-up">
                     
                     {/* Modal Header */}
-                    <div className="flex items-start justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                    <div className="flex items-start justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
                       <div className="space-y-1">
-                        <span className="px-2 py-0.5 rounded text-[9px] font-mono tracking-wider font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/40 uppercase">
-                          Rincian Biodata Kontingen
-                        </span>
-                        <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded text-[10px] font-mono tracking-wider font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/40 uppercase">
+                            Kelola Kontingen & Peserta
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            viewingPangkalan.jenisKelamin === 'Putra'
+                              ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/30 dark:text-blue-400'
+                              : 'bg-rose-50 text-rose-800 dark:bg-rose-950/30 dark:text-rose-400'
+                          }`}>
+                            {viewingPangkalan.jenisKelamin === 'Putra' ? '👦 Putra (Pa)' : '👧 Putri (Pi)'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                            {viewingPangkalan.tingkatan || 'Penggalang SD (SD/MI)'}
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight">
                           {viewingPangkalan.namaPangkalan}
                         </h3>
-                        <p className="text-[11px] text-zinc-400 font-mono">
-                          ID Peserta: <span className="text-emerald-700 dark:text-emerald-400 font-bold">{viewingPangkalan.idPeserta}</span> &bull; Kategori: {viewingPangkalan.jenisKelamin} &bull; Tingkatan: {viewingPangkalan.tingkatan || 'Penggalang SD'}
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+                          ID Peserta: <span className="text-emerald-700 dark:text-emerald-400 font-bold">{viewingPangkalan.idPeserta}</span> &bull; Kode QR: <span className="font-bold">{viewingPangkalan.kodeQr || viewingPangkalan.idPeserta}</span>
                         </p>
                       </div>
                       <button 
                         onClick={() => setViewingPangkalan(null)}
-                        className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                        className="p-1.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
                       >
                         <X className="w-5 h-5" />
                       </button>
                     </div>
 
-                    {/* Modal Content */}
-                    {!detail || ((!detail.namaPembina || detail.namaPembina.trim() === '') && (!detail.anggota || detail.anggota.length === 0)) ? (
-                      <div className="py-12 px-6 flex flex-col items-center justify-center text-center space-y-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl border border-zinc-100 dark:border-zinc-800">
-                        <AlertCircle className="w-10 h-10 text-amber-500" />
-                        <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-300">Belum Ada Data Diinput</h4>
-                        <p className="text-xs text-zinc-400 max-w-sm">
-                          Admin pangkalan ini belum menginput data Pembina Pendamping maupun Anggota Pramuka.
-                        </p>
+                    {/* Section 1: Data Pembina Pendamping */}
+                    <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                        <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Shield className="w-4 h-4 text-emerald-600 shrink-0" />
+                          Data Pembina Pendamping
+                        </h4>
+                        {pembinaSavedSuccess && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 animate-fade-in">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Data Pembina Berhasil Disimpan!
+                          </span>
+                        )}
                       </div>
-                    ) : (
-                      <div className="space-y-5">
-                        
-                        {/* Pembina Pendamping Card */}
-                        <div className="bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800 p-4 rounded-xl space-y-3">
-                          <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5 border-b border-zinc-150 dark:border-zinc-800 pb-2">
-                            <Shield className="w-4 h-4 text-emerald-600 shrink-0" />
-                            Pembina Pendamping
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-[10px] text-zinc-400 font-mono uppercase">Nama Pembina</p>
-                              <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase">
-                                {detail.namaPembina || <span className="italic font-normal text-zinc-400">(Belum diisi)</span>}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-zinc-400 font-mono uppercase">Nomor HP / WhatsApp</p>
-                              {detail.hpPembina ? (
-                                <a
-                                  href={`https://wa.me/${detail.hpPembina.replace(/\D/g, '').replace(/^0/, '62')}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-mono transition-colors border-b border-dashed border-emerald-500/45 pb-0.5 mt-0.5"
-                                  title="Hubungi via WhatsApp"
-                                >
-                                  <svg className="w-3.5 h-3.5 fill-current text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24">
-                                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.413 9.863-9.847.001-2.63-1.019-5.101-2.871-6.958C16.612 1.983 14.14 1.961 11.99 1.961c-5.437 0-9.861 4.414-9.864 9.848-.001 1.738.457 3.432 1.328 4.927l-1.012 3.7 3.79-.993zm11.566-7.585c-.302-.151-1.785-.882-2.057-.981-.273-.099-.471-.148-.669.149-.197.297-.767.98-.94 1.179-.173.197-.347.222-.649.072-.302-.151-1.272-.469-2.423-1.496-.895-.798-1.5-1.784-1.276-2.158.172-.297.025-.457-.125-.607-.135-.135-.302-.354-.452-.53-.15-.177-.2-.303-.301-.504-.101-.2-.05-.378-.025-.53.025-.151.197-.478.297-.677.1-.199.15-.347.223-.497.074-.149.037-.282-.012-.382-.049-.1-.472-1.14-.646-1.564-.17-.408-.344-.353-.472-.353-.122-.002-.264-.002-.408-.002-.144 0-.378.054-.576.273-.198.22-.756.74-.756 1.805 0 1.065.774 2.093.882 2.241.109.15 1.522 2.324 3.69 3.259.516.222.919.355 1.233.456.518.165.989.141 1.361.085.415-.062 1.272-.519 1.452-1.02.18-.501.18-.931.126-1.02-.054-.09-.2-.149-.502-.3zm0 0" />
-                                  </svg>
-                                  {detail.hpPembina}
-                                </a>
-                              ) : (
-                                <span className="italic font-normal text-zinc-400">(Belum diisi)</span>
-                              )}
-                            </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        <div className="md:col-span-6">
+                          <label className="block text-[10px] uppercase font-mono font-semibold text-zinc-500 dark:text-zinc-400 mb-1">
+                            Nama Pembina Pendamping
+                          </label>
+                          <input
+                            type="text"
+                            value={viewingPangkalanPembina.namaPembina}
+                            onChange={(e) => setViewingPangkalanPembina(prev => ({ ...prev, namaPembina: e.target.value }))}
+                            placeholder="Contoh: Kak Budi Santoso, S.Pd."
+                            className="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-zinc-900 dark:text-zinc-100 focus:ring-1 focus:ring-emerald-500 font-semibold"
+                          />
+                        </div>
+
+                        <div className="md:col-span-4">
+                          <label className="block text-[10px] uppercase font-mono font-semibold text-zinc-500 dark:text-zinc-400 mb-1">
+                            No. HP / WhatsApp Pembina
+                          </label>
+                          <div className="relative">
+                            <Phone className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-3" />
+                            <input
+                              type="tel"
+                              value={viewingPangkalanPembina.hpPembina}
+                              onChange={(e) => setViewingPangkalanPembina(prev => ({ ...prev, hpPembina: e.target.value }))}
+                              placeholder="Contoh: 081234567890"
+                              className="w-full text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-2.5 pl-8 pr-2.5 text-zinc-900 dark:text-zinc-100 focus:ring-1 focus:ring-emerald-500 font-mono"
+                            />
                           </div>
                         </div>
 
-                        {/* Anggota Pramuka Section */}
-                        <div className="space-y-2">
-                          <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                            <Users className="w-4 h-4 text-emerald-600 shrink-0" />
-                            Daftar Anggota Pramuka ({detail.anggota ? detail.anggota.length : 0} Orang)
-                          </h4>
-                          {!detail.anggota || detail.anggota.length === 0 ? (
-                            <p className="text-xs text-zinc-400 italic bg-zinc-50 dark:bg-zinc-900/30 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">
-                              Belum ada anggota yang diinput.
-                            </p>
-                          ) : (
-                            <div className="overflow-x-auto border border-zinc-100 dark:border-zinc-800 rounded-xl">
-                              <table className="w-full text-left text-xs border-collapse">
-                                <thead>
-                                  <tr className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-800 text-zinc-500 font-mono">
-                                    <th className="p-3 font-semibold w-12 text-center">NO.</th>
-                                    <th className="p-3 font-semibold w-32">ID ANGGOTA</th>
-                                    <th className="p-3 font-semibold">NAMA LENGKAP</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-zinc-700 dark:text-zinc-300">
-                                  {detail.anggota.map((ang, idx) => (
-                                    <tr key={`${ang.id || 'ang'}_${idx}`} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30">
-                                      <td className="p-3 text-center text-zinc-400 font-mono">{idx + 1}</td>
-                                      <td className="p-3 font-mono font-bold text-emerald-700 dark:text-emerald-400">{ang.id}</td>
-                                      <td className="p-3 font-semibold uppercase">{ang.nama}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
+                        <div className="md:col-span-2 flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => handleAdminSavePembina(viewingPangkalan.idPeserta, viewingPangkalanPembina.namaPembina, viewingPangkalanPembina.hpPembina)}
+                            className="w-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold py-2.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+                            title="Simpan perubahan nama dan nomor telepon pembina"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Simpan</span>
+                          </button>
                         </div>
-
                       </div>
-                    )}
 
-                    {/* Footer Buttons */}
-                    <div className="flex justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+                      {viewingPangkalanPembina.hpPembina && (
+                        <div className="pt-1 flex items-center gap-2">
+                          <a
+                            href={`https://wa.me/${viewingPangkalanPembina.hpPembina.replace(/\D/g, '').replace(/^0/, '62')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.413 9.863-9.847.001-2.63-1.019-5.101-2.871-6.958C16.612 1.983 14.14 1.961 11.99 1.961c-5.437 0-9.861 4.414-9.864 9.848-.001 1.738.457 3.432 1.328 4.927l-1.012 3.7 3.79-.993zm11.566-7.585c-.302-.151-1.785-.882-2.057-.981-.273-.099-.471-.148-.669.149-.197.297-.767.98-.94 1.179-.173.197-.347.222-.649.072-.302-.151-1.272-.469-2.423-1.496-.895-.798-1.5-1.784-1.276-2.158.172-.297.025-.457-.125-.607-.135-.135-.302-.354-.452-.53-.15-.177-.2-.303-.301-.504-.101-.2-.05-.378-.025-.53.025-.151.197-.478.297-.677.1-.199.15-.347.223-.497.074-.149.037-.282-.012-.382-.049-.1-.472-1.14-.646-1.564-.17-.408-.344-.353-.472-.353-.122-.002-.264-.002-.408-.002-.144 0-.378.054-.576.273-.198.22-.756.74-.756 1.805 0 1.065.774 2.093.882 2.241.109.15 1.522 2.324 3.69 3.259.516.222.919.355 1.233.456.518.165.989.141 1.361.085.415-.062 1.272-.519 1.452-1.02.18-.501.18-.931.126-1.02-.054-.09-.2-.149-.502-.3zm0 0" />
+                            </svg>
+                            Hubungi Pembina via WhatsApp ({viewingPangkalanPembina.hpPembina})
+                          </a>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Section 2: Daftar Peserta / Anggota Pramuka */}
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-emerald-600 shrink-0" />
+                          Daftar Anggota / Peserta Pramuka ({anggotaList.length} Orang)
+                        </h4>
+                        
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsBulkAddOpen(!isBulkAddOpen)}
+                            className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1 transition-all cursor-pointer"
+                          >
+                            <ListPlus className="w-3.5 h-3.5" />
+                            {isBulkAddOpen ? 'Tutup Input Batch' : 'Tambah Banyak Sekaligus (Batch)'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Single Anggota Quick Add Bar */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={viewingPangkalanNewAnggota}
+                          onChange={(e) => setViewingPangkalanNewAnggota(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAdminAddAnggota(viewingPangkalan.idPeserta, viewingPangkalanNewAnggota);
+                            }
+                          }}
+                          placeholder="Ketik nama lengkap anggota baru lalu tekan Enter atau klik Tambah..."
+                          className="flex-1 text-xs bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:ring-1 focus:ring-emerald-500 font-semibold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAdminAddAnggota(viewingPangkalan.idPeserta, viewingPangkalanNewAnggota)}
+                          disabled={!viewingPangkalanNewAnggota.trim()}
+                          className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer disabled:cursor-not-allowed shadow-sm shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Tambah Anggota</span>
+                        </button>
+                      </div>
+
+                      {/* Bulk Add Textarea Panel */}
+                      {isBulkAddOpen && (
+                        <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/60 p-3.5 rounded-xl space-y-2.5 animate-scale-up">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-wide">
+                              Tempel Daftar Nama Peserta (1 Baris = 1 Nama)
+                            </span>
+                            <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                              {viewingPangkalanBulkAnggota.split('\n').filter(l => l.trim()).length} nama terdeteksi
+                            </span>
+                          </div>
+                          <textarea
+                            rows={4}
+                            value={viewingPangkalanBulkAnggota}
+                            onChange={(e) => setViewingPangkalanBulkAnggota(e.target.value)}
+                            placeholder="Contoh:&#10;Ahmad Dahlan&#10;Muhammad Ridwan&#10;Fauzan Akbar&#10;Rizky Ramadhan"
+                            className="w-full text-xs font-mono p-3 bg-white dark:bg-zinc-800 border border-indigo-200 dark:border-indigo-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsBulkAddOpen(false);
+                                setViewingPangkalanBulkAnggota('');
+                              }}
+                              className="text-xs text-zinc-600 dark:text-zinc-400 font-semibold px-3 py-1.5 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdminBulkAddAnggota(viewingPangkalan.idPeserta, viewingPangkalanBulkAnggota)}
+                              disabled={!viewingPangkalanBulkAnggota.trim()}
+                              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:cursor-not-allowed"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Tambahkan Semua Nama</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Anggota List Table */}
+                      {anggotaList.length === 0 ? (
+                        <div className="py-8 px-4 flex flex-col items-center justify-center text-center space-y-2 bg-zinc-50 dark:bg-zinc-900/30 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                          <Users className="w-8 h-8 text-zinc-400" />
+                          <p className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Belum ada anggota yang terdaftar di pangkalan ini.</p>
+                          <p className="text-[11px] text-zinc-400">Ketik nama pada form di atas untuk menambahkan anggota regu/kontingen.</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 font-mono">
+                                <th className="p-3 font-semibold w-12 text-center">NO.</th>
+                                <th className="p-3 font-semibold w-32">ID ANGGOTA</th>
+                                <th className="p-3 font-semibold">NAMA LENGKAP PESERTA</th>
+                                <th className="p-3 font-semibold w-28 text-center">AKSI</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-zinc-700 dark:text-zinc-300">
+                              {anggotaList.map((ang, idx) => {
+                                const isEditing = editingAnggotaId === ang.id;
+
+                                return (
+                                  <tr key={`${ang.id || 'ang'}_${idx}`} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30">
+                                    <td className="p-3 text-center text-zinc-400 font-mono">{idx + 1}</td>
+                                    <td className="p-3 font-mono font-bold text-emerald-700 dark:text-emerald-400">{ang.id}</td>
+                                    <td className="p-3">
+                                      {isEditing ? (
+                                        <div className="flex items-center gap-1.5">
+                                          <input
+                                            type="text"
+                                            value={editingAnggotaName}
+                                            onChange={(e) => setEditingAnggotaName(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleAdminEditAnggota(viewingPangkalan.idPeserta, ang.id, editingAnggotaName);
+                                              } else if (e.key === 'Escape') {
+                                                setEditingAnggotaId(null);
+                                                setEditingAnggotaName('');
+                                              }
+                                            }}
+                                            autoFocus
+                                            className="w-full text-xs bg-white dark:bg-zinc-800 border border-emerald-500 rounded px-2.5 py-1 text-zinc-900 dark:text-zinc-100 font-bold focus:outline-none"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAdminEditAnggota(viewingPangkalan.idPeserta, ang.id, editingAnggotaName)}
+                                            className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
+                                            title="Simpan Perubahan Nama"
+                                          >
+                                            <Check className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingAnggotaId(null);
+                                              setEditingAnggotaName('');
+                                            }}
+                                            className="p-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 rounded transition-colors"
+                                            title="Batal"
+                                          >
+                                            <X className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <span className="font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-tight">
+                                          {ang.nama}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-3 text-center">
+                                      <div className="flex items-center justify-center gap-1.5">
+                                        {!isEditing && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingAnggotaId(ang.id);
+                                              setEditingAnggotaName(ang.nama);
+                                            }}
+                                            className="p-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg transition-colors cursor-pointer"
+                                            title="Edit Nama Anggota"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAdminDeleteAnggota(viewingPangkalan.idPeserta, ang.id, ang.nama)}
+                                          className="p-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/40 text-red-600 rounded-lg transition-colors cursor-pointer"
+                                          title="Hapus Anggota Ini"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Modal Footer Actions */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 dark:border-zinc-800 pt-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadIdCardKontingen(viewingPangkalan)}
+                          disabled={isGeneratingIdCard}
+                          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+                          title="Cetak ID Card untuk seluruh anggota & pembina kontingen ini"
+                        >
+                          {isGeneratingIdCard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+                          <span>Cetak ID Card Kontingen (PDF)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadSertifikatKontingen(viewingPangkalan)}
+                          disabled={isGeneratingSertifikat}
+                          className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+                          title="Cetak Sertifikat F4 Folio berstempel untuk kontingen ini"
+                        >
+                          {isGeneratingSertifikat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />}
+                          <span>Cetak Sertifikat (F4 Folio)</span>
+                        </button>
+                      </div>
+
                       <button
+                        type="button"
                         onClick={() => setViewingPangkalan(null)}
-                        className="bg-zinc-150 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold py-2 px-4 rounded-xl transition-all active:scale-95"
+                        className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold py-2.5 px-5 rounded-xl transition-all active:scale-95 cursor-pointer"
                       >
                         Tutup
                       </button>
@@ -2436,10 +2936,10 @@ export default function AdminPanel({
             {isPesertaModalOpen && (
               <>
                 <div onClick={() => setIsPesertaModalOpen(false)} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm animate-fade-in" />
-                <form onSubmit={handleSavePeserta} style={{ backgroundColor: '#02050a' }} className="fixed inset-x-4 top-[10%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl z-50 max-h-[80vh] overflow-y-auto p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-2xl animate-scale-up">
+                <form onSubmit={handleSavePeserta} style={{ backgroundColor: '#02050a' }} className="fixed inset-x-4 top-[8%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl z-50 max-h-[85vh] overflow-y-auto p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-2xl animate-scale-up">
                   <div className="col-span-1 md:col-span-2 flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700 pb-2 mb-2">
                     <h4 className="font-bold text-sm text-emerald-800 dark:text-emerald-400 uppercase">
-                      {pesertaFormMode === 'tambah' ? 'Tambah Peserta Baru' : 'Ubah Biodata Peserta'}
+                      {pesertaFormMode === 'tambah' ? 'Tambah Peserta & Pangkalan Baru' : 'Ubah Biodata Peserta & Pangkalan'}
                     </h4>
                     <button type="button" onClick={() => setIsPesertaModalOpen(false)} className="text-xs text-red-600 font-semibold">Batal</button>
                   </div>
@@ -2498,6 +2998,28 @@ export default function AdminPanel({
                     <option value="Penggalang SMP (SMP/MTs)">Penggalang SMP (SMP/MTs)</option>
                     <option value="Penegak (SMA/MA/SMK)">Penegak (SMA/MA/SMK)</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-mono font-semibold text-zinc-500 mb-1">Nama Pembina Pendamping (Opsional)</label>
+                  <input
+                    type="text"
+                    value={pesertaForm.namaPembina || ''}
+                    onChange={(e) => setPesertaForm(prev => ({ ...prev, namaPembina: e.target.value }))}
+                    className="w-full text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 focus:ring-1 focus:ring-emerald-500"
+                    placeholder="Contoh: Kak Budi Santoso"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-mono font-semibold text-zinc-500 mb-1">No. HP / WhatsApp Pembina (Opsional)</label>
+                  <input
+                    type="tel"
+                    value={pesertaForm.hpPembina || ''}
+                    onChange={(e) => setPesertaForm(prev => ({ ...prev, hpPembina: e.target.value }))}
+                    className="w-full text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 focus:ring-1 focus:ring-emerald-500 font-mono"
+                    placeholder="Contoh: 081234567890"
+                  />
                 </div>
 
                 <div>
